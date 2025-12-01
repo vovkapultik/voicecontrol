@@ -135,8 +135,12 @@ class AppUI:
         tk.Label(self.root, textvariable=self.offline_var, fg="red").grid(row=7, column=0, columnspan=3, sticky="w", **padding)
         if self._offline:
             self.offline_var.set("No internet access - using default password.")
+        if sys.platform.startswith("darwin") or sys.platform.startswith("linux"):
+            tk.Label(self.root, fg="red", text="Speaker loopback capture requires Windows/WASAPI.").grid(
+                row=8, column=0, columnspan=3, sticky="w", **padding
+            )
 
-        tk.Button(self.root, text="Quit", command=self.root.quit).grid(row=8, column=0, **padding)
+        tk.Button(self.root, text="Quit", command=self.root.quit).grid(row=9, column=0, **padding)
 
         if self.config.config.recording_enabled:
             self._start_recording()

@@ -20,7 +20,23 @@ def list_input_devices() -> List[DeviceInfo]:
 def default_input_device() -> int | None:
     try:
         default = sd.default.device[0]
-        return int(default) if default is not None else None
+        if default is None or default == -1:
+            return None
+        return int(default)
     except Exception:
         return None
 
+
+def first_input_device() -> int | None:
+    devices = list_input_devices()
+    return devices[0][0] if devices else None
+
+
+def default_output_device() -> int | None:
+    try:
+        default = sd.default.device[1]
+        if default is None or default == -1:
+            return None
+        return int(default)
+    except Exception:
+        return None

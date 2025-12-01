@@ -5,10 +5,12 @@ import threading
 import time
 from pathlib import Path
 from typing import Optional
+import sys
 
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
+from .devices import first_input_device, default_output_device
 
 
 class AudioRecorder:
@@ -38,9 +40,19 @@ class AudioRecorder:
 
     def _loopback_device(self) -> Optional[object]:
         """Return loopback device handle if supported (Windows WASAPI)."""
+        if not sys.platform.startswith("win"):
+            logging.warning("Speaker loopback capture is only supported on Windows (WASAPI).")
+            return None
         try:
             if hasattr(sd, "WasapiLoopback"):
-                target = self.spk_device if self.spk_device is not None else sd.default.device[1]
+                target = self.spk_device
+                if target is None:
+                    target = default_output_device()
+                if target is None:
+                    target = sd.default.device[1] if sd.default.device else None
+                if target is None or target == -1:
+                    logging.error("No valid output device found for loopback.")
+                    return None
                 return sd.WasapiLoopback(target)
         except Exception as exc:
             logging.warning("Loopback device unavailable: %s", exc)
@@ -88,6 +100,10 @@ class AudioRecorder:
         if not start_mic(self.mic_device):
             if self.mic_device is not None:
                 start_mic(None)
+            else:
+                alt = first_input_device()
+                if alt is not None:
+                    start_mic(alt)
 
         loopback = self._loopback_device()
         if loopback:

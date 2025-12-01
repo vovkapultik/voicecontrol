@@ -6,7 +6,7 @@ Python client for recording mic + system audio on Windows, gated by a master pas
 - Fetches master password from `GET {server}/api/client/password`; falls back to `123456` and shows “No internet access” if unreachable.
 - Password-protected settings UI (Tk).
 - Start/stop recording, set chunk length, set API key, toggle “run on startup” flag (Windows registry HKCU Run entry), pick mic device.
-- Captures microphone + WASAPI loopback (speakers) and saves chunked WAV files (default 30s) to `%LOCALAPPDATA%/voicecontrol/recordings`.
+- Captures microphone + WASAPI loopback (speakers) and saves chunked WAV files (default 30s) to `%LOCALAPPDATA%/voicecontrol/recordings` (loopback requires Windows/WASAPI).
 - Hook in place (`on_chunk`) to stream uploaded chunks later.
 
 ## Quickstart (Windows)
