@@ -10,7 +10,7 @@ import sys
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
-from .devices import first_input_device, default_output_device
+from .devices import first_input_device, default_output_device, default_input_device
 
 
 class AudioRecorder:
@@ -79,6 +79,8 @@ class AudioRecorder:
 
     def _start_streams(self) -> None:
         def start_mic(device: Optional[int]) -> bool:
+            if device is not None and device == -1:
+                device = None
             try:
                 self._mic_stream = sd.InputStream(
                     device=device,
@@ -88,22 +90,27 @@ class AudioRecorder:
                     callback=self._enqueue(self.mic_queue),
                 )
                 self._mic_stream.start()
-                if device is not None:
-                    logging.info("Mic capture started on device %s", device)
-                else:
-                    logging.info("Mic capture started on default device")
+                logging.info("Mic capture started on %s", "default" if device is None else device)
                 return True
             except Exception as exc:
                 logging.error("Unable to start microphone capture (device=%s): %s", device, exc)
                 return False
 
-        if not start_mic(self.mic_device):
-            if self.mic_device is not None:
-                start_mic(None)
-            else:
-                alt = first_input_device()
-                if alt is not None:
-                    start_mic(alt)
+        # Try ordered candidates: configured -> default input -> first available -> None
+        candidates = []
+        if self.mic_device is not None:
+            candidates.append(self.mic_device)
+        default_in = default_input_device()
+        if default_in is not None and default_in not in candidates:
+            candidates.append(default_in)
+        alt = first_input_device()
+        if alt is not None and alt not in candidates:
+            candidates.append(alt)
+        candidates.append(None)
+
+        for cand in candidates:
+            if start_mic(cand):
+                break
 
         loopback = self._loopback_device()
         if loopback:
