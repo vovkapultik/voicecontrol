@@ -96,7 +96,7 @@ class AudioRecorder:
                 logging.error("Unable to start microphone capture (device=%s): %s", device, exc)
                 return False
 
-        # Try ordered candidates: configured -> default input -> first available -> None
+        # Try ordered candidates: configured -> default input -> first available
         candidates = []
         if self.mic_device is not None:
             candidates.append(self.mic_device)
@@ -106,11 +106,15 @@ class AudioRecorder:
         alt = first_input_device()
         if alt is not None and alt not in candidates:
             candidates.append(alt)
-        candidates.append(None)
 
-        for cand in candidates:
-            if start_mic(cand):
-                break
+        if not candidates:
+            logging.error("No input devices available; microphone will not be recorded.")
+        else:
+            for cand in candidates:
+                if start_mic(cand):
+                    break
+            else:
+                logging.error("Unable to start microphone on any device candidate: %s", candidates)
 
         loopback = self._loopback_device()
         if loopback:
