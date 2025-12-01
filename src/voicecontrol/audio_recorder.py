@@ -10,7 +10,7 @@ import sys
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
-from .devices import first_input_device, default_output_device, default_input_device
+from .devices import first_input_device, default_output_device, default_input_device, list_output_devices
 
 
 class AudioRecorder:
@@ -53,6 +53,7 @@ class AudioRecorder:
                 if target is None or target == -1:
                     logging.error("No valid output device found for loopback.")
                     return None
+                logging.info("Using output device %s for loopback", target)
                 return sd.WasapiLoopback(target)
         except Exception as exc:
             logging.warning("Loopback device unavailable: %s", exc)

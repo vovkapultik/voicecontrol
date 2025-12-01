@@ -33,6 +33,16 @@ def main() -> None:
         # Placeholder for future streaming to server.
         logging.debug("Chunk ready for upload: %s", path)
 
+    # Log available devices for diagnostics.
+    try:
+        import sounddevice as sd
+
+        for i, dev in enumerate(sd.query_devices()):
+            logging.info("Device %s: %s (in=%s out=%s)", i, dev.get("name"), dev.get("max_input_channels"), dev.get("max_output_channels"))
+        logging.info("Default devices: %s", sd.default.device)
+    except Exception as exc:
+        logging.warning("Could not enumerate devices: %s", exc)
+
     cfg_mgr = ConfigManager()
 
     # Sync startup setting with registry on launch.

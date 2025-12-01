@@ -7,7 +7,7 @@ from .audio_recorder import AudioRecorder
 from .auth import MasterPasswordProvider
 from .config import ConfigManager
 from . import startup
-from .devices import list_input_devices, default_input_device
+from .devices import list_input_devices, list_output_devices, default_input_device
 
 
 class AppUI:
@@ -130,18 +130,42 @@ class AppUI:
 
         tk.Button(self.root, text="Save", command=save_mic).grid(row=5, column=3, **padding)
 
-        tk.Label(self.root, text="Recordings directory").grid(row=6, column=0, sticky="w", **padding)
-        tk.Label(self.root, text=str(self.config.recordings_dir())).grid(row=6, column=1, columnspan=2, sticky="w", **padding)
+        tk.Label(self.root, text="Speaker device").grid(row=6, column=0, sticky="w", **padding)
+        spk_devices = list_output_devices()
+        spk_var = tk.StringVar(value=str(self.config.config.spk_device) if self.config.config.spk_device is not None else "")
+        spk_options = [f"{idx}:{name}" for idx, name in spk_devices] or ["Default"]
+        spk_menu = tk.OptionMenu(self.root, spk_var, *spk_options)
+        spk_menu.grid(row=6, column=1, columnspan=2, sticky="we", **padding)
 
-        tk.Label(self.root, textvariable=self.offline_var, fg="red").grid(row=7, column=0, columnspan=3, sticky="w", **padding)
+        def save_spk() -> None:
+            sel = spk_var.get()
+            if ":" in sel:
+                try:
+                    val = int(sel.split(":", 1)[0])
+                    self.config.update(spk_device=val)
+                    self.recorder.spk_device = val
+                    messagebox.showinfo("Saved", f"Speaker device set to {sel}")
+                except Exception:
+                    messagebox.showerror("Invalid", "Could not parse device selection.")
+            else:
+                self.config.update(spk_device=None)
+                self.recorder.spk_device = None
+                messagebox.showinfo("Saved", "Speaker device reset to default")
+
+        tk.Button(self.root, text="Save", command=save_spk).grid(row=6, column=3, **padding)
+
+        tk.Label(self.root, text="Recordings directory").grid(row=7, column=0, sticky="w", **padding)
+        tk.Label(self.root, text=str(self.config.recordings_dir())).grid(row=7, column=1, columnspan=2, sticky="w", **padding)
+
+        tk.Label(self.root, textvariable=self.offline_var, fg="red").grid(row=8, column=0, columnspan=3, sticky="w", **padding)
         if self._offline:
             self.offline_var.set("No internet access - using default password.")
         if sys.platform.startswith("darwin") or sys.platform.startswith("linux"):
             tk.Label(self.root, fg="red", text="Speaker loopback capture requires Windows/WASAPI.").grid(
-                row=8, column=0, columnspan=3, sticky="w", **padding
+                row=9, column=0, columnspan=3, sticky="w", **padding
             )
 
-        tk.Button(self.root, text="Quit", command=self.root.quit).grid(row=9, column=0, **padding)
+        tk.Button(self.root, text="Quit", command=self.root.quit).grid(row=10, column=0, **padding)
 
         if self.config.config.recording_enabled:
             self._start_recording()

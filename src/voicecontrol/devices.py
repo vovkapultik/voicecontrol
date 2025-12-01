@@ -40,3 +40,14 @@ def default_output_device() -> int | None:
         return int(default)
     except Exception:
         return None
+
+
+def list_output_devices() -> List[DeviceInfo]:
+    devices: List[DeviceInfo] = []
+    try:
+        for idx, dev in enumerate(sd.query_devices()):
+            if dev.get("max_output_channels", 0) > 0:
+                devices.append((idx, dev.get("name", f"Device {idx}")))
+    except Exception as exc:
+        logging.error("Failed to query output devices: %s", exc)
+    return devices
