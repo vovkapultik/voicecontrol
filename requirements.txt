@@ -1,0 +1,4 @@
+httpx>=0.25.0
+soundfile>=0.12.1
+numpy>=1.26.0
+PyAudioWPatch>=0.2.12
