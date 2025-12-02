@@ -71,3 +71,26 @@ def list_wasapi_output_devices() -> List[DeviceInfo]:
 
 def has_wasapi_output_devices() -> bool:
     return bool(list_wasapi_output_devices())
+
+
+def choose_wasapi_output(preferred_names: list[str] | None = None) -> int | None:
+    """Pick the best WASAPI output device index.
+
+    Preference order:
+    1) Matches one of preferred_names (case-insensitive substring match)
+    2) Non-Remote/virtual devices
+    3) First available
+    """
+    devices = list_wasapi_output_devices()
+    if not devices:
+        return None
+    preferred = [p.lower() for p in (preferred_names or [])]
+    for idx, name in devices:
+        lower = name.lower()
+        if any(p in lower for p in preferred):
+            return idx
+    for idx, name in devices:
+        lower = name.lower()
+        if "remote audio" not in lower:
+            return idx
+    return devices[0][0]

@@ -9,7 +9,6 @@ from .auth import MasterPasswordProvider
 from .config import ConfigManager
 from . import startup
 from .devices import list_input_devices, list_output_devices, default_input_device, has_wasapi_output_devices
-from .installer import install_vb_cable, VB_CABLE_INSTALLER
 
 
 class AppUI:
@@ -58,31 +57,6 @@ class AppUI:
         tk.Button(self.root, text="Start", command=self._start_recording).grid(row=row, column=0, **padding)
         tk.Button(self.root, text="Stop", command=self._stop_recording).grid(row=row, column=1, **padding)
         row += 1
-
-        if sys.platform.startswith("win"):
-            if not has_wasapi_output_devices():
-                self.loopback_missing_var.set("No WASAPI loopback device found. Install VB-CABLE.")
-                tk.Label(self.root, fg="red", textvariable=self.loopback_missing_var, wraplength=600, justify="left").grid(
-                    row=row, column=0, columnspan=4, sticky="w", **padding
-                )
-                row += 1
-
-            def install_driver() -> None:
-                if not VB_CABLE_INSTALLER.exists():
-                    messagebox.showerror(
-                        "Loopback",
-                        f"Installer not found at {VB_CABLE_INSTALLER}. Please place VBCable_Setup_x64.exe there.",
-                    )
-                    return
-                ok = install_vb_cable()
-                if ok:
-                    messagebox.showinfo("Loopback", "Installer launched. Complete it, then restart the app.")
-                    self.loopback_missing_var.set("Installer launched; restart after completion.")
-                else:
-                    messagebox.showerror("Loopback", "Failed to launch VB-CABLE installer.")
-
-            tk.Button(self.root, text="Install loopback driver", command=install_driver).grid(row=row, column=0, **padding)
-            row += 1
 
         tk.Label(self.root, text="Chunk length (seconds)").grid(row=row, column=0, sticky="w", **padding)
         chunk_var = tk.StringVar(value=str(self.config.config.chunk_seconds))

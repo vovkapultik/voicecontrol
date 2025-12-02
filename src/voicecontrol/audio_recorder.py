@@ -15,7 +15,14 @@ try:
     import soundcard as sc  # type: ignore
 except Exception:
     sc = None
-from .devices import first_input_device, default_output_device, default_input_device, list_output_devices, list_wasapi_output_devices
+from .devices import (
+    first_input_device,
+    default_output_device,
+    default_input_device,
+    list_output_devices,
+    list_wasapi_output_devices,
+    choose_wasapi_output,
+)
 
 
 class AudioRecorder:
@@ -77,8 +84,14 @@ class AudioRecorder:
         return None, False
 
     def _pick_loopback_target(self, wasapi_outputs: set[int]) -> Optional[int]:
+        # If user configured a device and it's still present, honor it.
         if self.spk_device is not None and self.spk_device in wasapi_outputs:
             return self.spk_device
+        # Prefer known virtual/loopback-friendly names (VB-CABLE, virtual).
+        preferred = ["cable output", "vb-audio", "virtual", "loopback"]
+        picked = choose_wasapi_output(preferred_names=preferred)
+        if picked is not None and picked in wasapi_outputs:
+            return picked
         default_out = default_output_device()
         if default_out is not None and default_out in wasapi_outputs:
             return default_out
@@ -251,6 +264,10 @@ class AudioRecorder:
 
             mic_channel = normalize(mic_channel)
             spk_channel = normalize(spk_channel)
+            # Avoid saving completely silent chunks to reduce noise; require some activity.
+            if np.max(np.abs(spk_channel)) < 1e-4 and np.max(np.abs(mic_channel)) < 1e-4:
+                logging.info("Chunk skipped due to silence.")
+                return
             stereo = np.hstack([mic_channel, spk_channel])
 
             timestamp = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
@@ -388,9 +405,10 @@ class AudioRecorder:
             if hasattr(sc, "all_microphones"):
                 loopbacks = sc.all_microphones(include_loopback=True)
             if loopbacks:
+                preferred = ["cable output", "vb-audio", "virtual", "loopback"]
                 for mic in loopbacks:
                     name = getattr(mic, "name", "").lower()
-                    if "loopback" in name or "cable output" in name or "virtual" in name:
+                    if any(p in name for p in preferred):
                         return mic
                 return loopbacks[0]
         except Exception as exc:
