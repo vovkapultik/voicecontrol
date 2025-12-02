@@ -41,6 +41,7 @@ class AppUI:
 
     def _show_login(self) -> None:
         # Login UI disabled for now.
+        pass
 
     def _build_main(self) -> None:
         self.root.title("VoiceControl Client")
