@@ -32,36 +32,15 @@ class AppUI:
         self.loopback_missing_var = tk.StringVar(value="")
 
     def run(self) -> None:
-        self._master_password, self._offline = self.password_provider.fetch()
-        self._show_login()
+        # Password fetch and login temporarily disabled.
+        # self._master_password, self._offline = self.password_provider.fetch()
+        # self._show_login()
+        self.root.deiconify()
+        self._build_main()
         self.root.mainloop()
 
     def _show_login(self) -> None:
-        login_win = tk.Toplevel(self.root)
-        login_win.title("VoiceControl - Unlock")
-        login_win.geometry("320x180")
-        login_win.resizable(False, False)
-
-        tk.Label(login_win, text="Enter master password to continue:").pack(pady=(20, 10))
-        if self._offline:
-            tk.Label(login_win, fg="red", text="No internet access; using fallback password").pack(pady=(0, 10))
-        entry = tk.Entry(login_win, show="*", width=30)
-        entry.pack(pady=(0, 10))
-        entry.focus_set()
-
-        error_label = tk.Label(login_win, fg="red")
-        error_label.pack()
-
-        def submit() -> None:
-            if entry.get() == self._master_password:
-                login_win.destroy()
-                self.root.deiconify()
-                self._build_main()
-            else:
-                error_label.config(text="Incorrect password")
-
-        tk.Button(login_win, text="Unlock", command=submit).pack(pady=10)
-        login_win.protocol("WM_DELETE_WINDOW", self.root.quit)
+        # Login UI disabled for now.
 
     def _build_main(self) -> None:
         self.root.title("VoiceControl Client")
