@@ -226,6 +226,9 @@ class AudioRecorder:
                 frames = max(frames, mic_data.shape[0])
             if spk_data is not None:
                 frames = max(frames, spk_data.shape[0])
+            # Ensure we at least hit the configured chunk duration even if data is sparse.
+            target_frames = int(self.chunk_seconds * self.sample_rate)
+            frames = max(frames, target_frames)
             if frames == 0:
                 return
 
@@ -351,12 +354,10 @@ class AudioRecorder:
                             with loopback_mic.recorder(samplerate=self.sample_rate, channels=1, blocksize=1024) as rec:
                                 while not self._sc_stop.is_set() and self._running.is_set():
                                     data = rec.record(numframes=1024)
-                                    if data is not None:
-                                        self.spk_queue.put(np.asarray(data, dtype="float32"))
+                                    self._push_speaker_data(data)
                         elif hasattr(loopback_mic, "record"):
                             data = loopback_mic.record(numframes=1024, samplerate=self.sample_rate, channels=1)
-                            if data is not None:
-                                self.spk_queue.put(np.asarray(data, dtype="float32"))
+                            self._push_speaker_data(data)
                             time.sleep(0.01)
                         else:
                             logging.error("Loopback device does not support recorder/record methods.")
@@ -395,6 +396,23 @@ class AudioRecorder:
         except Exception as exc:
             logging.error("Error finding soundcard loopback device: %s", exc)
         return None
+
+    def _push_speaker_data(self, data: Optional[np.ndarray]) -> None:
+        """Normalize speaker data into float32 mono and enqueue."""
+        if data is None:
+            return
+        try:
+            if isinstance(data, (bytes, bytearray)):
+                data = np.frombuffer(data, dtype="float32")
+            data = np.asarray(data, dtype="float32")
+            if data.ndim == 1:
+                data = data.reshape(-1, 1)
+            elif data.ndim > 1 and data.shape[1] > 1:
+                data = data[:, :1]
+            if data.size:
+                self.spk_queue.put(data)
+        except Exception as exc:
+            logging.debug("Failed to enqueue speaker data: %s", exc)
 
     @staticmethod
     def _init_com() -> None:
