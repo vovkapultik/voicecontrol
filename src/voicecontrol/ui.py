@@ -1,5 +1,6 @@
 import logging
 import sys
+import time
 import tkinter as tk
 from tkinter import messagebox
 
@@ -7,7 +8,8 @@ from .audio_recorder import AudioRecorder
 from .auth import MasterPasswordProvider
 from .config import ConfigManager
 from . import startup
-from .devices import list_input_devices, list_output_devices, default_input_device
+from .devices import list_input_devices, list_output_devices, default_input_device, has_wasapi_output_devices
+from .installer import install_vb_cable
 
 
 class AppUI:
@@ -27,6 +29,7 @@ class AppUI:
         self.main_win: tk.Toplevel | None = None
         self.status_var = tk.StringVar(value="Stopped")
         self.offline_var = tk.StringVar(value="")
+        self.loopback_missing_var = tk.StringVar(value="")
 
     def run(self) -> None:
         self._master_password, self._offline = self.password_provider.fetch()
@@ -164,6 +167,22 @@ class AppUI:
             tk.Label(self.root, fg="red", text="Speaker loopback capture requires Windows/WASAPI.").grid(
                 row=9, column=0, columnspan=3, sticky="w", **padding
             )
+
+        if sys.platform.startswith("win") and not has_wasapi_output_devices():
+            self.loopback_missing_var.set("No WASAPI loopback device found. Install VB-CABLE?")
+            tk.Label(self.root, fg="red", textvariable=self.loopback_missing_var).grid(
+                row=10, column=0, columnspan=3, sticky="w", **padding
+            )
+
+            def install_driver() -> None:
+                ok = install_vb_cable()
+                if ok:
+                    messagebox.showinfo("Loopback", "Installer launched. Complete it, then restart the app.")
+                    self.loopback_missing_var.set("Installer launched; restart after completion.")
+                else:
+                    messagebox.showerror("Loopback", "Failed to launch VB-CABLE installer. Ensure the installer file exists.")
+
+            tk.Button(self.root, text="Install loopback driver", command=install_driver).grid(row=11, column=0, **padding)
 
         tk.Button(self.root, text="Quit", command=self.root.quit).grid(row=10, column=0, **padding)
 

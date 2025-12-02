@@ -51,3 +51,23 @@ def list_output_devices() -> List[DeviceInfo]:
     except Exception as exc:
         logging.error("Failed to query output devices: %s", exc)
     return devices
+
+
+def list_wasapi_output_devices() -> List[DeviceInfo]:
+    """Return output devices on the WASAPI host API (required for loopback)."""
+    results: List[DeviceInfo] = []
+    try:
+        hostapis = sd.query_hostapis()
+        wasapi_indices = {i for i, api in enumerate(hostapis) if "WASAPI" in api.get("name", "").upper()}
+        for idx, dev in enumerate(sd.query_devices()):
+            if dev.get("max_output_channels", 0) <= 0:
+                continue
+            if dev.get("hostapi") in wasapi_indices:
+                results.append((idx, dev.get("name", f"Device {idx}")))
+    except Exception as exc:
+        logging.error("Failed to query WASAPI output devices: %s", exc)
+    return results
+
+
+def has_wasapi_output_devices() -> bool:
+    return bool(list_wasapi_output_devices())

@@ -10,7 +10,7 @@ import sys
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
-from .devices import first_input_device, default_output_device, default_input_device, list_output_devices
+from .devices import first_input_device, default_output_device, default_input_device, list_output_devices, list_wasapi_output_devices
 
 
 class AudioRecorder:
@@ -45,15 +45,23 @@ class AudioRecorder:
             return None
         try:
             if hasattr(sd, "WasapiLoopback"):
-                target = self.spk_device
+                # Prefer user-selected device if it is WASAPI-capable.
+                wasapi_outputs = {idx for idx, _ in list_wasapi_output_devices()}
+                target = None
+                if self.spk_device is not None and self.spk_device in wasapi_outputs:
+                    target = self.spk_device
                 if target is None:
-                    target = default_output_device()
+                    # Default output if WASAPI-capable
+                    default_out = default_output_device()
+                    if default_out is not None and default_out in wasapi_outputs:
+                        target = default_out
                 if target is None:
-                    target = sd.default.device[1] if sd.default.device else None
-                if target is None or target == -1:
-                    logging.error("No valid output device found for loopback.")
+                    # First WASAPI output
+                    target = next(iter(wasapi_outputs), None)
+                if target is None:
+                    logging.error("No WASAPI output device found; loopback unavailable. Enable a WASAPI device (e.g., system speakers).")
                     return None
-                logging.info("Using output device %s for loopback", target)
+                logging.info("Using WASAPI output device %s for loopback", target)
                 return sd.WasapiLoopback(target)
         except Exception as exc:
             logging.warning("Loopback device unavailable: %s", exc)

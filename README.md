@@ -28,3 +28,6 @@ If the server is unreachable at launch, enter `123456` to unlock (UI will note o
   pyinstaller --onefile -w --name VoiceControlClient app.py
   ```
   On Windows the artifact will be `dist/VoiceControlClient.exe` (on other OSes the extension may differ). Ensure PortAudio/WASAPI binaries and the VC runtime are present on the target; test the frozen binary for startup registration and device access. Code signing is recommended to reduce SmartScreen prompts.
+
+## Loopback driver
+- Speaker loopback requires a WASAPI-capable output. If none is found, the app shows an “Install loopback driver” button (expects `drivers/VBCable_Setup_x64.exe` bundled) to install VB-Audio Virtual Cable. Bundle the installer if licensing/compliance allows; after installation, restart the app to use the new loopback device.
