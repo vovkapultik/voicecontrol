@@ -107,8 +107,7 @@ class AudioRecorder:
         if loopback:
             try:
                 if use_flag:
-                    logging.error("loopback flag not supported by this sounddevice build; skipping sounddevice loopback.")
-                else:
+                    raise RuntimeError("loopback flag not supported by this sounddevice build.")
                 self._spk_stream = sd.InputStream(
                     device=loopback,
                     samplerate=self.sample_rate,
