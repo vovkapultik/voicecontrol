@@ -10,6 +10,10 @@ import sys
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
+try:
+    import soundcard as sc  # type: ignore
+except Exception:
+    sc = None
 from .devices import first_input_device, default_output_device, default_input_device, list_output_devices, list_wasapi_output_devices
 
 
@@ -41,6 +45,9 @@ class AudioRecorder:
         self._loopback_needs_flag: bool = False
         self._watch_thread: Optional[threading.Thread] = None
         self._watch_stop = threading.Event()
+        self._sc_thread: Optional[threading.Thread] = None
+        self._sc_stop = threading.Event()
+        self._sc_speaker = None
 
     def _loopback_device(self) -> tuple[Optional[object], bool]:
         """Return (device, use_loopback_flag) for speaker capture."""
@@ -139,23 +146,31 @@ class AudioRecorder:
         loopback, use_flag = self._loopback_device()
         if loopback:
             try:
-                self._spk_stream = sd.InputStream(
+                params = dict(
                     device=loopback,
-                    loopback=use_flag,
                     samplerate=self.sample_rate,
                     channels=1,
                     dtype="float32",
                     callback=self._enqueue(self.spk_queue),
                 )
+                if use_flag:
+                    params["loopback"] = True
+                self._spk_stream = sd.InputStream(**params)
                 self._spk_stream.start()
+            except TypeError as exc:
+                logging.error("Loopback flag not supported by this sounddevice version: %s", exc)
+                self._spk_stream = None
             except Exception as exc:
                 logging.error("Unable to start speaker capture: %s", exc)
         else:
-            logging.warning("Speaker loopback capture not available; recording mic only.")
+            logging.warning("Speaker loopback capture not available via sounddevice; attempting soundcard fallback.")
+        if self._spk_stream is None:
+            self._start_soundcard_loopback()
         self._start_output_watcher()
 
     def _stop_streams(self) -> None:
         self._stop_output_watcher()
+        self._stop_soundcard_loopback()
         for stream in (self._mic_stream, self._spk_stream):
             try:
                 if stream:
@@ -283,24 +298,75 @@ class AudioRecorder:
                 self._spk_stream.stop()
                 self._spk_stream.close()
                 self._spk_stream = None
+            self._stop_soundcard_loopback()
             self._active_loopback_device = target
             if target is None:
                 logging.warning("No loopback target available to restart.")
+                self._start_soundcard_loopback()
                 return
-            loopback, use_flag = (None, False)
-            if hasattr(sd, "WasapiLoopback"):
-                loopback = sd.WasapiLoopback(target)
-            else:
-                loopback, use_flag = target, True
-            self._spk_stream = sd.InputStream(
-                device=loopback,
-                loopback=use_flag,
-                samplerate=self.sample_rate,
-                channels=1,
-                dtype="float32",
-                callback=self._enqueue(self.spk_queue),
-            )
-            self._spk_stream.start()
-            logging.info("Speaker loopback restarted on device %s", target)
+            try:
+                loopback, use_flag = (None, False)
+                if hasattr(sd, "WasapiLoopback"):
+                    loopback = sd.WasapiLoopback(target)
+                else:
+                    loopback, use_flag = target, True
+                params = dict(
+                    device=loopback,
+                    samplerate=self.sample_rate,
+                    channels=1,
+                    dtype="float32",
+                    callback=self._enqueue(self.spk_queue),
+                )
+                if use_flag:
+                    params["loopback"] = True
+                self._spk_stream = sd.InputStream(**params)
+                self._spk_stream.start()
+                logging.info("Speaker loopback restarted on device %s", target)
+            except TypeError:
+                logging.warning("Loopback flag not supported; falling back to soundcard loopback")
+                self._start_soundcard_loopback()
+            except Exception as exc:
+                logging.error("Failed to restart speaker loopback: %s", exc)
+                self._start_soundcard_loopback()
         except Exception as exc:
             logging.error("Failed to restart speaker loopback: %s", exc)
+
+    def _start_soundcard_loopback(self) -> None:
+        if sc is None:
+            logging.error("soundcard module not available; cannot start fallback loopback.")
+            return
+        if self._sc_thread and self._sc_thread.is_alive():
+            return
+        try:
+            speaker = sc.default_speaker()
+            if speaker is None:
+                speakers = sc.all_speakers()
+                speaker = speakers[0] if speakers else None
+            if speaker is None:
+                logging.error("No speaker found for soundcard loopback fallback.")
+                return
+            self._sc_speaker = speaker
+            self._sc_stop.clear()
+
+            def run() -> None:
+                try:
+                    with speaker.recorder(samplerate=self.sample_rate, channels=1) as rec:
+                        while not self._sc_stop.is_set() and self._running.is_set():
+                            data = rec.record(numframes=1024)
+                            if data is not None:
+                                self.spk_queue.put(np.asarray(data, dtype="float32"))
+                except Exception as exc_inner:
+                    logging.error("Soundcard loopback thread failed: %s", exc_inner)
+
+            self._sc_thread = threading.Thread(target=run, name="soundcard-loopback", daemon=True)
+            self._sc_thread.start()
+            logging.info("Started soundcard loopback fallback using %s", speaker)
+        except Exception as exc:
+            logging.error("Unable to start soundcard loopback fallback: %s", exc)
+
+    def _stop_soundcard_loopback(self) -> None:
+        self._sc_stop.set()
+        if self._sc_thread:
+            self._sc_thread.join(timeout=2)
+        self._sc_thread = None
+        self._sc_speaker = None
