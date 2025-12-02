@@ -8,7 +8,7 @@ from .audio_recorder import AudioRecorder
 from .auth import MasterPasswordProvider
 from .config import ConfigManager
 from . import startup
-from .devices import list_input_devices, list_output_devices, default_input_device, has_wasapi_output_devices
+from .devices import list_output_devices, has_wasapi_output_devices
 
 
 class AppUI:
@@ -94,29 +94,6 @@ class AppUI:
         startup_chk.grid(row=row, column=1, sticky="w", **padding)
         if startup.is_enabled() and not startup_var.get():
             startup_var.set(True)
-        row += 1
-
-        tk.Label(self.root, text="Mic device").grid(row=row, column=0, sticky="w", **padding)
-        devices = list_input_devices()
-        mic_var = tk.StringVar(value=str(self.config.config.mic_device) if self.config.config.mic_device is not None else "")
-        options = [f"{idx}:{name}" for idx, name in devices]
-        if not options:
-            options = ["No input devices found"]
-        mic_menu = tk.OptionMenu(self.root, mic_var, *options)
-        mic_menu.grid(row=row, column=1, columnspan=2, sticky="we", **padding)
-
-        def save_mic() -> None:
-            sel = mic_var.get()
-            if ":" in sel:
-                try:
-                    val = int(sel.split(":", 1)[0])
-                    self.config.update(mic_device=val)
-                    self.recorder.mic_device = val
-                    messagebox.showinfo("Saved", f"Mic device set to {sel}")
-                except Exception:
-                    messagebox.showerror("Invalid", "Could not parse device selection.")
-
-        tk.Button(self.root, text="Save", command=save_mic).grid(row=row, column=3, **padding)
         row += 1
 
         tk.Label(self.root, text="Speaker device (loopback source)").grid(row=row, column=0, sticky="w", **padding)

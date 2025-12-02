@@ -26,7 +26,6 @@ class ClientConfig:
     run_on_startup: bool = False
     chunk_seconds: int = 30
     sample_rate: int = 48_000
-    mic_device: int | None = None
     spk_device: int | None = None
 
     @classmethod
@@ -38,7 +37,6 @@ class ClientConfig:
             run_on_startup=bool(payload.get("run_on_startup", cls.run_on_startup)),
             chunk_seconds=int(payload.get("chunk_seconds", cls.chunk_seconds)),
             sample_rate=int(payload.get("sample_rate", cls.sample_rate)),
-            mic_device=payload.get("mic_device"),
             spk_device=payload.get("spk_device"),
         )
 

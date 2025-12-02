@@ -57,7 +57,6 @@ def main() -> None:
         chunk_seconds=cfg_mgr.config.chunk_seconds,
         sample_rate=cfg_mgr.config.sample_rate,
         on_chunk=chunk_ready,
-        mic_device=cfg_mgr.config.mic_device,
         spk_device=cfg_mgr.config.spk_device,
     )
     password_provider = MasterPasswordProvider(

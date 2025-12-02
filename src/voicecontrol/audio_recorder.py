@@ -15,18 +15,11 @@ try:
     import soundcard as sc  # type: ignore
 except Exception:
     sc = None
-from .devices import (
-    first_input_device,
-    default_output_device,
-    default_input_device,
-    list_output_devices,
-    list_wasapi_output_devices,
-    choose_wasapi_output,
-)
+from .devices import default_output_device, list_output_devices, list_wasapi_output_devices, choose_wasapi_output
 
 
 class AudioRecorder:
-    """Capture microphone + system audio and write chunked WAV files."""
+    """Capture system audio and write chunked WAV files."""
 
     def __init__(
         self,
@@ -34,20 +27,16 @@ class AudioRecorder:
         chunk_seconds: int = 30,
         sample_rate: int = 48_000,
         on_chunk: Optional[callable] = None,
-        mic_device: Optional[int] = None,
         spk_device: Optional[int] = None,
     ) -> None:
         self.output_dir = output_dir
         self.chunk_seconds = max(5, chunk_seconds)
         self.sample_rate = sample_rate
         self.on_chunk = on_chunk
-        self.mic_device = mic_device
         self.spk_device = spk_device
-        self.mic_queue: queue.Queue[np.ndarray] = queue.Queue()
         self.spk_queue: queue.Queue[np.ndarray] = queue.Queue()
         self._running = threading.Event()
         self._worker: Optional[threading.Thread] = None
-        self._mic_stream: Optional[sd.InputStream] = None
         self._spk_stream: Optional[sd.InputStream] = None
         self._active_loopback_device: Optional[int] = None
         self._loopback_needs_flag: bool = False
@@ -124,44 +113,6 @@ class AudioRecorder:
         logging.info("Audio recorder stopped")
 
     def _start_streams(self) -> None:
-        def start_mic(device: Optional[int]) -> bool:
-            if device is not None and device == -1:
-                device = None
-            try:
-                self._mic_stream = sd.InputStream(
-                    device=device,
-                    samplerate=self.sample_rate,
-                    channels=1,
-                    dtype="float32",
-                    callback=self._enqueue(self.mic_queue),
-                )
-                self._mic_stream.start()
-                logging.info("Mic capture started on %s", "default" if device is None else device)
-                return True
-            except Exception as exc:
-                logging.error("Unable to start microphone capture (device=%s): %s", device, exc)
-                return False
-
-        # Try ordered candidates: configured -> default input -> first available
-        candidates = []
-        if self.mic_device is not None:
-            candidates.append(self.mic_device)
-        default_in = default_input_device()
-        if default_in is not None and default_in not in candidates:
-            candidates.append(default_in)
-        alt = first_input_device()
-        if alt is not None and alt not in candidates:
-            candidates.append(alt)
-
-        if not candidates:
-            logging.error("No input devices available; microphone will not be recorded.")
-        else:
-            for cand in candidates:
-                if start_mic(cand):
-                    break
-            else:
-                logging.error("Unable to start microphone on any device candidate: %s", candidates)
-
         loopback, use_flag = self._loopback_device()
         if loopback:
             try:
@@ -188,14 +139,13 @@ class AudioRecorder:
     def _stop_streams(self) -> None:
         self._stop_output_watcher()
         self._stop_soundcard_loopback()
-        for stream in (self._mic_stream, self._spk_stream):
+        for stream in (self._spk_stream,):
             try:
                 if stream:
                     stream.stop()
                     stream.close()
             except Exception:
                 pass
-        self._mic_stream = None
         self._spk_stream = None
 
     @staticmethod
@@ -209,42 +159,28 @@ class AudioRecorder:
         return callback
 
     def _run(self) -> None:
-        mic_buffer: list[np.ndarray] = []
         spk_buffer: list[np.ndarray] = []
         frames_target = int(self.chunk_seconds * self.sample_rate)
         last_write = time.monotonic()
 
         while self._running.is_set():
             try:
-                mic_buffer.append(self.mic_queue.get(timeout=0.1))
-            except queue.Empty:
-                pass
-            try:
-                spk_buffer.append(self.spk_queue.get_nowait())
+                spk_buffer.append(self.spk_queue.get(timeout=0.1))
             except queue.Empty:
                 pass
 
             elapsed = time.monotonic() - last_write
-            mic_frames = int(sum(chunk.shape[0] for chunk in mic_buffer))
             spk_frames = int(sum(chunk.shape[0] for chunk in spk_buffer))
-            max_frames = max(mic_frames, spk_frames)
 
-            if max_frames >= frames_target or elapsed >= self.chunk_seconds:
-                self._write_chunk(mic_buffer, spk_buffer)
-                mic_buffer.clear()
+            if spk_frames >= frames_target or elapsed >= self.chunk_seconds:
+                self._write_chunk(spk_buffer)
                 spk_buffer.clear()
                 last_write = time.monotonic()
 
-    def _write_chunk(self, mic_buffer: list[np.ndarray], spk_buffer: list[np.ndarray]) -> None:
+    def _write_chunk(self, spk_buffer: list[np.ndarray]) -> None:
         try:
-            mic_data = np.concatenate(mic_buffer) if mic_buffer else None
             spk_data = np.concatenate(spk_buffer) if spk_buffer else None
-            frames = 0
-            if mic_data is not None:
-                frames = max(frames, mic_data.shape[0])
-            if spk_data is not None:
-                frames = max(frames, spk_data.shape[0])
-            # Ensure we at least hit the configured chunk duration even if data is sparse.
+            frames = spk_data.shape[0] if spk_data is not None else 0
             target_frames = int(self.chunk_seconds * self.sample_rate)
             frames = max(frames, target_frames)
             if frames == 0:
@@ -258,7 +194,6 @@ class AudioRecorder:
                     data = np.vstack([data, np.zeros((pad_len, 1), dtype="float32")])
                 return data
 
-            mic_channel = pad(mic_data)
             spk_channel = pad(spk_data)
             # Headroom normalization to prevent clipping
             def normalize(data: np.ndarray) -> np.ndarray:
@@ -267,17 +202,16 @@ class AudioRecorder:
                     data = data / peak
                 return np.clip(data, -1.0, 1.0)
 
-            mic_channel = normalize(mic_channel)
             spk_channel = normalize(spk_channel)
             # Avoid saving completely silent chunks to reduce noise; require some activity.
-            if np.max(np.abs(spk_channel)) < 1e-4 and np.max(np.abs(mic_channel)) < 1e-4:
+            if np.max(np.abs(spk_channel)) < 1e-4:
                 logging.info("Chunk skipped due to silence.")
                 return
-            stereo = np.hstack([mic_channel, spk_channel])
+            mono = spk_channel  # single-channel WAV
 
             timestamp = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
             filepath = self.output_dir / f"chunk_{timestamp}.wav"
-            sf.write(filepath, stereo, samplerate=self.sample_rate, subtype="PCM_16")
+            sf.write(filepath, mono, samplerate=self.sample_rate, subtype="PCM_16")
             logging.info("Saved audio chunk: %s", filepath)
             if self.on_chunk:
                 try:
