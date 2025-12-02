@@ -28,6 +28,7 @@ def main() -> None:
         format="%(asctime)s [%(levelname)s] %(message)s",
         handlers=handlers,
     )
+    logging.info("v0 voicecontrol started")
 
     def chunk_ready(path: str) -> None:
         # Placeholder for future streaming to server.
