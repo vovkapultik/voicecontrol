@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from typing import Optional
 import sys
+import ctypes
 
 import numpy as np
 import sounddevice as sd
@@ -344,6 +345,7 @@ class AudioRecorder:
 
             def run() -> None:
                 try:
+                    self._init_com()
                     while not self._sc_stop.is_set() and self._running.is_set():
                         if hasattr(loopback_mic, "recorder"):
                             with loopback_mic.recorder(samplerate=self.sample_rate, channels=1, blocksize=1024) as rec:
@@ -393,3 +395,15 @@ class AudioRecorder:
         except Exception as exc:
             logging.error("Error finding soundcard loopback device: %s", exc)
         return None
+
+    @staticmethod
+    def _init_com() -> None:
+        """Initialize COM for soundcard on Windows to avoid RPC_E_CHANGED_MODE (0x800401f0)."""
+        if not sys.platform.startswith("win"):
+            return
+        try:
+            ole32 = ctypes.windll.ole32  # type: ignore
+            COINIT_MULTITHREADED = 0x0
+            ole32.CoInitializeEx(None, COINIT_MULTITHREADED)
+        except Exception:
+            pass
