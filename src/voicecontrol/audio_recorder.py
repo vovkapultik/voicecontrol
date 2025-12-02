@@ -37,6 +37,9 @@ class AudioRecorder:
         self._worker: Optional[threading.Thread] = None
         self._mic_stream: Optional[sd.InputStream] = None
         self._spk_stream: Optional[sd.InputStream] = None
+        self._active_loopback_device: Optional[int] = None
+        self._watch_thread: Optional[threading.Thread] = None
+        self._watch_stop = threading.Event()
 
     def _loopback_device(self) -> Optional[object]:
         """Return loopback device handle if supported (Windows WASAPI)."""
@@ -47,24 +50,26 @@ class AudioRecorder:
             if hasattr(sd, "WasapiLoopback"):
                 # Prefer user-selected device if it is WASAPI-capable.
                 wasapi_outputs = {idx for idx, _ in list_wasapi_output_devices()}
-                target = None
-                if self.spk_device is not None and self.spk_device in wasapi_outputs:
-                    target = self.spk_device
-                if target is None:
-                    # Default output if WASAPI-capable
-                    default_out = default_output_device()
-                    if default_out is not None and default_out in wasapi_outputs:
-                        target = default_out
-                if target is None:
-                    # First WASAPI output
-                    target = next(iter(wasapi_outputs), None)
+                target = self._pick_loopback_target(wasapi_outputs)
                 if target is None:
                     logging.error("No WASAPI output device found; loopback unavailable. Enable a WASAPI device (e.g., system speakers).")
                     return None
-                logging.info("Using WASAPI output device %s for loopback", target)
+                if target != self._active_loopback_device:
+                    logging.info("Using WASAPI output device %s for loopback", target)
+                    self._active_loopback_device = target
                 return sd.WasapiLoopback(target)
         except Exception as exc:
             logging.warning("Loopback device unavailable: %s", exc)
+        return None
+
+    def _pick_loopback_target(self, wasapi_outputs: set[int]) -> Optional[int]:
+        if self.spk_device is not None and self.spk_device in wasapi_outputs:
+            return self.spk_device
+        default_out = default_output_device()
+        if default_out is not None and default_out in wasapi_outputs:
+            return default_out
+        if wasapi_outputs:
+            return next(iter(wasapi_outputs))
         return None
 
     def start(self) -> None:
@@ -140,8 +145,10 @@ class AudioRecorder:
                 logging.error("Unable to start speaker capture: %s", exc)
         else:
             logging.warning("Speaker loopback capture not available; recording mic only.")
+        self._start_output_watcher()
 
     def _stop_streams(self) -> None:
+        self._stop_output_watcher()
         for stream in (self._mic_stream, self._spk_stream):
             try:
                 if stream:
@@ -233,3 +240,55 @@ class AudioRecorder:
                     logging.warning("Chunk callback failed: %s", exc)
         except Exception as exc:
             logging.exception("Failed to write chunk: %s", exc)
+
+    def _start_output_watcher(self) -> None:
+        if not sys.platform.startswith("win"):
+            return
+        if self._watch_thread and self._watch_thread.is_alive():
+            return
+        self._watch_stop.clear()
+        self._watch_thread = threading.Thread(target=self._watch_output_changes, name="output-watch", daemon=True)
+        self._watch_thread.start()
+
+    def _stop_output_watcher(self) -> None:
+        self._watch_stop.set()
+        if self._watch_thread:
+            self._watch_thread.join(timeout=2)
+        self._watch_thread = None
+
+    def _watch_output_changes(self) -> None:
+        """Monitor for output device changes and restart loopback stream if needed."""
+        while self._running.is_set() and not self._watch_stop.is_set():
+            try:
+                wasapi_outputs = {idx for idx, _ in list_wasapi_output_devices()}
+                target = self._pick_loopback_target(wasapi_outputs)
+                if target != self._active_loopback_device:
+                    logging.info("Detected output change; switching loopback to %s", target)
+                    self._restart_speaker(target)
+                time.sleep(5)
+            except Exception as exc:  # pragma: no cover - guard
+                logging.debug("Output watch error: %s", exc)
+                time.sleep(5)
+
+    def _restart_speaker(self, target: Optional[int]) -> None:
+        try:
+            if self._spk_stream:
+                self._spk_stream.stop()
+                self._spk_stream.close()
+                self._spk_stream = None
+            self._active_loopback_device = target
+            if target is None:
+                logging.warning("No loopback target available to restart.")
+                return
+            loopback = sd.WasapiLoopback(target)
+            self._spk_stream = sd.InputStream(
+                device=loopback,
+                samplerate=self.sample_rate,
+                channels=1,
+                dtype="float32",
+                callback=self._enqueue(self.spk_queue),
+            )
+            self._spk_stream.start()
+            logging.info("Speaker loopback restarted on device %s", target)
+        except Exception as exc:
+            logging.error("Failed to restart speaker loopback: %s", exc)
