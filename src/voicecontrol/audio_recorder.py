@@ -38,29 +38,35 @@ class AudioRecorder:
         self._mic_stream: Optional[sd.InputStream] = None
         self._spk_stream: Optional[sd.InputStream] = None
         self._active_loopback_device: Optional[int] = None
+        self._loopback_needs_flag: bool = False
         self._watch_thread: Optional[threading.Thread] = None
         self._watch_stop = threading.Event()
 
-    def _loopback_device(self) -> Optional[object]:
-        """Return loopback device handle if supported (Windows WASAPI)."""
+    def _loopback_device(self) -> tuple[Optional[object], bool]:
+        """Return (device, use_loopback_flag) for speaker capture."""
         if not sys.platform.startswith("win"):
             logging.warning("Speaker loopback capture is only supported on Windows (WASAPI).")
-            return None
+            return None, False
         try:
+            # Prefer user-selected device if it is WASAPI-capable.
+            wasapi_outputs = {idx for idx, _ in list_wasapi_output_devices()}
+            target = self._pick_loopback_target(wasapi_outputs)
+            if target is None:
+                logging.error("No WASAPI output device found; loopback unavailable. Enable a WASAPI device (e.g., system speakers).")
+                return None, False
+            if target != self._active_loopback_device:
+                logging.info("Using WASAPI output device %s for loopback", target)
+                self._active_loopback_device = target
+
+            # Prefer WasapiLoopback helper; fallback to loopback=True if not present.
             if hasattr(sd, "WasapiLoopback"):
-                # Prefer user-selected device if it is WASAPI-capable.
-                wasapi_outputs = {idx for idx, _ in list_wasapi_output_devices()}
-                target = self._pick_loopback_target(wasapi_outputs)
-                if target is None:
-                    logging.error("No WASAPI output device found; loopback unavailable. Enable a WASAPI device (e.g., system speakers).")
-                    return None
-                if target != self._active_loopback_device:
-                    logging.info("Using WASAPI output device %s for loopback", target)
-                    self._active_loopback_device = target
-                return sd.WasapiLoopback(target)
+                return sd.WasapiLoopback(target), False
+            else:
+                logging.info("WasapiLoopback helper not available; using loopback=True on device %s", target)
+                return target, True
         except Exception as exc:
             logging.warning("Loopback device unavailable: %s", exc)
-        return None
+        return None, False
 
     def _pick_loopback_target(self, wasapi_outputs: set[int]) -> Optional[int]:
         if self.spk_device is not None and self.spk_device in wasapi_outputs:
@@ -130,11 +136,12 @@ class AudioRecorder:
             else:
                 logging.error("Unable to start microphone on any device candidate: %s", candidates)
 
-        loopback = self._loopback_device()
+        loopback, use_flag = self._loopback_device()
         if loopback:
             try:
                 self._spk_stream = sd.InputStream(
                     device=loopback,
+                    loopback=use_flag,
                     samplerate=self.sample_rate,
                     channels=1,
                     dtype="float32",
@@ -280,9 +287,14 @@ class AudioRecorder:
             if target is None:
                 logging.warning("No loopback target available to restart.")
                 return
-            loopback = sd.WasapiLoopback(target)
+            loopback, use_flag = (None, False)
+            if hasattr(sd, "WasapiLoopback"):
+                loopback = sd.WasapiLoopback(target)
+            else:
+                loopback, use_flag = target, True
             self._spk_stream = sd.InputStream(
                 device=loopback,
+                loopback=use_flag,
                 samplerate=self.sample_rate,
                 channels=1,
                 dtype="float32",
