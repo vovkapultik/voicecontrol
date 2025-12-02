@@ -65,7 +65,12 @@ class AudioRecorder:
         try:
             # Prefer user-selected device if it is WASAPI-capable.
             wasapi_outputs = {idx for idx, _ in list_wasapi_output_devices()}
-            target = self._pick_loopback_target(wasapi_outputs)
+            target = None
+            # If user selected a specific device, honor it regardless of host API.
+            if self.spk_device is not None:
+                target = self.spk_device
+            else:
+                target = self._pick_loopback_target(wasapi_outputs)
             if target is None:
                 logging.error("No WASAPI output device found; loopback unavailable. Enable a WASAPI device (e.g., system speakers).")
                 return None, False
