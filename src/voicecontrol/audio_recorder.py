@@ -335,39 +335,36 @@ class AudioRecorder:
         if self._sc_thread and self._sc_thread.is_alive():
             return
         try:
-            speaker = getattr(sc, "default_speaker", lambda: None)()
-            if speaker is None:
-                speakers = getattr(sc, "all_speakers", lambda: [])()
-                speaker = speakers[0] if speakers else None
-            if speaker is None:
-                logging.error("No speaker found for soundcard loopback fallback.")
+            loopback_mic = self._find_soundcard_loopback()
+            if loopback_mic is None:
+                logging.error("No soundcard loopback device found for fallback.")
                 return
-            self._sc_speaker = speaker
+            self._sc_speaker = loopback_mic
             self._sc_stop.clear()
 
             def run() -> None:
                 try:
                     while not self._sc_stop.is_set() and self._running.is_set():
-                        if hasattr(speaker, "recorder"):
-                            with speaker.recorder(samplerate=self.sample_rate, channels=1) as rec:
+                        if hasattr(loopback_mic, "recorder"):
+                            with loopback_mic.recorder(samplerate=self.sample_rate, channels=1, blocksize=1024) as rec:
                                 while not self._sc_stop.is_set() and self._running.is_set():
                                     data = rec.record(numframes=1024)
                                     if data is not None:
                                         self.spk_queue.put(np.asarray(data, dtype="float32"))
-                        elif hasattr(speaker, "record"):
-                            data = speaker.record(numframes=1024, samplerate=self.sample_rate, channels=1)
+                        elif hasattr(loopback_mic, "record"):
+                            data = loopback_mic.record(numframes=1024, samplerate=self.sample_rate, channels=1)
                             if data is not None:
                                 self.spk_queue.put(np.asarray(data, dtype="float32"))
                             time.sleep(0.01)
                         else:
-                            logging.error("Speaker does not support recorder/record methods.")
+                            logging.error("Loopback device does not support recorder/record methods.")
                             break
                 except Exception as exc_inner:
                     logging.error("Soundcard loopback thread failed: %s", exc_inner)
 
             self._sc_thread = threading.Thread(target=run, name="soundcard-loopback", daemon=True)
             self._sc_thread.start()
-            logging.info("Started soundcard loopback fallback using %s", speaker)
+            logging.info("Started soundcard loopback fallback using %s", loopback_mic)
         except Exception as exc:
             logging.error("Unable to start soundcard loopback fallback: %s", exc)
 
@@ -377,3 +374,22 @@ class AudioRecorder:
             self._sc_thread.join(timeout=2)
         self._sc_thread = None
         self._sc_speaker = None
+
+    def _find_soundcard_loopback(self):
+        """Try to locate a loopback-capable microphone from soundcard."""
+        if sc is None:
+            return None
+        try:
+            # Prefer default speaker loopback mic if available
+            loopbacks = []
+            if hasattr(sc, "all_microphones"):
+                loopbacks = sc.all_microphones(include_loopback=True)
+            if loopbacks:
+                for mic in loopbacks:
+                    name = getattr(mic, "name", "").lower()
+                    if "loopback" in name or "cable output" in name or "virtual" in name:
+                        return mic
+                return loopbacks[0]
+        except Exception as exc:
+            logging.error("Error finding soundcard loopback device: %s", exc)
+        return None
