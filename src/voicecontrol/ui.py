@@ -65,21 +65,24 @@ class AppUI:
 
     def _build_main(self) -> None:
         self.root.title("VoiceControl Client")
-        self.root.geometry("420x360")
+        self.root.geometry("520x520")
         self.root.resizable(False, False)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         padding = {"padx": 12, "pady": 6}
+        row = 0
 
-        tk.Label(self.root, text="Recording").grid(row=0, column=0, sticky="w", **padding)
-        tk.Label(self.root, textvariable=self.status_var).grid(row=0, column=1, sticky="w", **padding)
-        tk.Button(self.root, text="Start", command=self._start_recording).grid(row=1, column=0, **padding)
-        tk.Button(self.root, text="Stop", command=self._stop_recording).grid(row=1, column=1, **padding)
+        tk.Label(self.root, text="Recording").grid(row=row, column=0, sticky="w", **padding)
+        tk.Label(self.root, textvariable=self.status_var).grid(row=row, column=1, sticky="w", **padding)
+        row += 1
+        tk.Button(self.root, text="Start", command=self._start_recording).grid(row=row, column=0, **padding)
+        tk.Button(self.root, text="Stop", command=self._stop_recording).grid(row=row, column=1, **padding)
+        row += 1
 
-        tk.Label(self.root, text="Chunk length (seconds)").grid(row=2, column=0, sticky="w", **padding)
+        tk.Label(self.root, text="Chunk length (seconds)").grid(row=row, column=0, sticky="w", **padding)
         chunk_var = tk.StringVar(value=str(self.config.config.chunk_seconds))
         chunk_entry = tk.Entry(self.root, textvariable=chunk_var, width=10)
-        chunk_entry.grid(row=2, column=1, sticky="w", **padding)
+        chunk_entry.grid(row=row, column=1, sticky="w", **padding)
 
         def save_chunk() -> None:
             try:
@@ -91,34 +94,37 @@ class AppUI:
             except Exception:
                 messagebox.showerror("Invalid", "Enter an integer >= 5")
 
-        tk.Button(self.root, text="Save", command=save_chunk).grid(row=2, column=2, **padding)
+        tk.Button(self.root, text="Save", command=save_chunk).grid(row=row, column=2, **padding)
+        row += 1
 
-        tk.Label(self.root, text="API key").grid(row=3, column=0, sticky="w", **padding)
+        tk.Label(self.root, text="API key").grid(row=row, column=0, sticky="w", **padding)
         api_var = tk.StringVar(value=self.config.config.api_key)
         api_entry = tk.Entry(self.root, textvariable=api_var, width=30)
-        api_entry.grid(row=3, column=1, columnspan=2, sticky="we", **padding)
+        api_entry.grid(row=row, column=1, columnspan=2, sticky="we", **padding)
 
         def save_api() -> None:
             self.config.update(api_key=api_var.get())
             messagebox.showinfo("Saved", "API key updated")
 
-        tk.Button(self.root, text="Save", command=save_api).grid(row=3, column=3, **padding)
+        tk.Button(self.root, text="Save", command=save_api).grid(row=row, column=3, **padding)
+        row += 1
 
-        tk.Label(self.root, text="Run on startup").grid(row=4, column=0, sticky="w", **padding)
+        tk.Label(self.root, text="Run on startup").grid(row=row, column=0, sticky="w", **padding)
         startup_var = tk.BooleanVar(value=self.config.config.run_on_startup)
         startup_chk = tk.Checkbutton(self.root, variable=startup_var, command=lambda: self._toggle_startup(startup_var))
-        startup_chk.grid(row=4, column=1, sticky="w", **padding)
+        startup_chk.grid(row=row, column=1, sticky="w", **padding)
         if startup.is_enabled() and not startup_var.get():
             startup_var.set(True)
+        row += 1
 
-        tk.Label(self.root, text="Mic device").grid(row=5, column=0, sticky="w", **padding)
+        tk.Label(self.root, text="Mic device").grid(row=row, column=0, sticky="w", **padding)
         devices = list_input_devices()
         mic_var = tk.StringVar(value=str(self.config.config.mic_device) if self.config.config.mic_device is not None else "")
         options = [f"{idx}:{name}" for idx, name in devices]
         if not options:
             options = ["No input devices found"]
         mic_menu = tk.OptionMenu(self.root, mic_var, *options)
-        mic_menu.grid(row=5, column=1, columnspan=2, sticky="we", **padding)
+        mic_menu.grid(row=row, column=1, columnspan=2, sticky="we", **padding)
 
         def save_mic() -> None:
             sel = mic_var.get()
@@ -131,14 +137,15 @@ class AppUI:
                 except Exception:
                     messagebox.showerror("Invalid", "Could not parse device selection.")
 
-        tk.Button(self.root, text="Save", command=save_mic).grid(row=5, column=3, **padding)
+        tk.Button(self.root, text="Save", command=save_mic).grid(row=row, column=3, **padding)
+        row += 1
 
-        tk.Label(self.root, text="Speaker device").grid(row=6, column=0, sticky="w", **padding)
+        tk.Label(self.root, text="Speaker device").grid(row=row, column=0, sticky="w", **padding)
         spk_devices = list_output_devices()
         spk_var = tk.StringVar(value=str(self.config.config.spk_device) if self.config.config.spk_device is not None else "")
         spk_options = [f"{idx}:{name}" for idx, name in spk_devices] or ["Default"]
         spk_menu = tk.OptionMenu(self.root, spk_var, *spk_options)
-        spk_menu.grid(row=6, column=1, columnspan=2, sticky="we", **padding)
+        spk_menu.grid(row=row, column=1, columnspan=2, sticky="we", **padding)
 
         def save_spk() -> None:
             sel = spk_var.get()
@@ -155,24 +162,29 @@ class AppUI:
                 self.recorder.spk_device = None
                 messagebox.showinfo("Saved", "Speaker device reset to default")
 
-        tk.Button(self.root, text="Save", command=save_spk).grid(row=6, column=3, **padding)
+        tk.Button(self.root, text="Save", command=save_spk).grid(row=row, column=3, **padding)
+        row += 1
 
-        tk.Label(self.root, text="Recordings directory").grid(row=7, column=0, sticky="w", **padding)
-        tk.Label(self.root, text=str(self.config.recordings_dir())).grid(row=7, column=1, columnspan=2, sticky="w", **padding)
+        tk.Label(self.root, text="Recordings directory").grid(row=row, column=0, sticky="w", **padding)
+        tk.Label(self.root, text=str(self.config.recordings_dir())).grid(row=row, column=1, columnspan=2, sticky="w", **padding)
+        row += 1
 
-        tk.Label(self.root, textvariable=self.offline_var, fg="red").grid(row=8, column=0, columnspan=3, sticky="w", **padding)
+        tk.Label(self.root, textvariable=self.offline_var, fg="red").grid(row=row, column=0, columnspan=3, sticky="w", **padding)
         if self._offline:
             self.offline_var.set("No internet access - using default password.")
+        row += 1
         if sys.platform.startswith("darwin") or sys.platform.startswith("linux"):
             tk.Label(self.root, fg="red", text="Speaker loopback capture requires Windows/WASAPI.").grid(
-                row=9, column=0, columnspan=3, sticky="w", **padding
+                row=row, column=0, columnspan=3, sticky="w", **padding
             )
+            row += 1
 
         if sys.platform.startswith("win") and not has_wasapi_output_devices():
             self.loopback_missing_var.set("No WASAPI loopback device found. Install VB-CABLE?")
             tk.Label(self.root, fg="red", textvariable=self.loopback_missing_var).grid(
-                row=10, column=0, columnspan=3, sticky="w", **padding
+                row=row, column=0, columnspan=4, sticky="w", **padding
             )
+            row += 1
 
             def install_driver() -> None:
                 ok = install_vb_cable()
@@ -182,9 +194,10 @@ class AppUI:
                 else:
                     messagebox.showerror("Loopback", "Failed to launch VB-CABLE installer. Ensure the installer file exists.")
 
-            tk.Button(self.root, text="Install loopback driver", command=install_driver).grid(row=11, column=0, **padding)
+            tk.Button(self.root, text="Install loopback driver", command=install_driver).grid(row=row, column=0, **padding)
+            row += 1
 
-        tk.Button(self.root, text="Quit", command=self.root.quit).grid(row=10, column=0, **padding)
+        tk.Button(self.root, text="Quit", command=self.root.quit).grid(row=row, column=0, **padding)
 
         if self.config.config.recording_enabled:
             self._start_recording()
