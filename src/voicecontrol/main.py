@@ -30,6 +30,11 @@ def main() -> None:
     )
     logging.info("v0 voicecontrol started")
 
+    if not sys.platform.startswith("win"):
+        logging.error("VoiceControl Client runs on Windows only (WASAPI required).")
+        print("VoiceControl Client runs on Windows only.", file=sys.stderr)
+        return
+
     def chunk_ready(path: str) -> None:
         # Placeholder for future streaming to server.
         logging.debug("Chunk ready for upload: %s", path)

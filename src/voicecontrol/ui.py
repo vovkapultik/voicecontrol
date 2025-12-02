@@ -1,5 +1,4 @@
 import logging
-import sys
 import time
 import tkinter as tk
 from tkinter import messagebox
@@ -129,28 +128,11 @@ class AppUI:
         if self._offline:
             self.offline_var.set("No internet access - using default password.")
         row += 1
-        if sys.platform.startswith("darwin") or sys.platform.startswith("linux"):
-            tk.Label(self.root, fg="red", text="Speaker loopback capture requires Windows/WASAPI.").grid(
-                row=row, column=0, columnspan=3, sticky="w", **padding
-            )
-            row += 1
-
-        if sys.platform.startswith("win") and not has_wasapi_output_devices():
-            self.loopback_missing_var.set("No WASAPI loopback device found. Install VB-CABLE?")
+        if not has_wasapi_output_devices():
+            self.loopback_missing_var.set("No WASAPI loopback device found. Configure a Windows playback device before recording.")
             tk.Label(self.root, fg="red", textvariable=self.loopback_missing_var).grid(
                 row=row, column=0, columnspan=4, sticky="w", **padding
             )
-            row += 1
-
-            def install_driver() -> None:
-                ok = install_vb_cable()
-                if ok:
-                    messagebox.showinfo("Loopback", "Installer launched. Complete it, then restart the app.")
-                    self.loopback_missing_var.set("Installer launched; restart after completion.")
-                else:
-                    messagebox.showerror("Loopback", "Failed to launch VB-CABLE installer. Ensure the installer file exists.")
-
-            tk.Button(self.root, text="Install loopback driver", command=install_driver).grid(row=row, column=0, **padding)
             row += 1
 
         tk.Button(self.root, text="Quit", command=self.root.quit).grid(row=row, column=0, **padding)
