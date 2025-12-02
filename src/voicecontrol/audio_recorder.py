@@ -146,22 +146,20 @@ class AudioRecorder:
         loopback, use_flag = self._loopback_device()
         if loopback:
             try:
-                params = dict(
-                    device=loopback,
-                    samplerate=self.sample_rate,
-                    channels=1,
-                    dtype="float32",
-                    callback=self._enqueue(self.spk_queue),
-                )
                 if use_flag:
-                    params["loopback"] = True
-                self._spk_stream = sd.InputStream(**params)
-                self._spk_stream.start()
-            except TypeError as exc:
-                logging.error("Loopback flag not supported by this sounddevice version: %s", exc)
-                self._spk_stream = None
+                    logging.error("loopback flag not supported by this sounddevice build; skipping sounddevice loopback.")
+                else:
+                    self._spk_stream = sd.InputStream(
+                        device=loopback,
+                        samplerate=self.sample_rate,
+                        channels=1,
+                        dtype="float32",
+                        callback=self._enqueue(self.spk_queue),
+                    )
+                    self._spk_stream.start()
             except Exception as exc:
                 logging.error("Unable to start speaker capture: %s", exc)
+                self._spk_stream = None
         else:
             logging.warning("Speaker loopback capture not available via sounddevice; attempting soundcard fallback.")
         if self._spk_stream is None:
@@ -310,16 +308,15 @@ class AudioRecorder:
                     loopback = sd.WasapiLoopback(target)
                 else:
                     loopback, use_flag = target, True
-                params = dict(
+                if use_flag:
+                    raise TypeError("loopback flag unsupported in this sounddevice build")
+                self._spk_stream = sd.InputStream(
                     device=loopback,
                     samplerate=self.sample_rate,
                     channels=1,
                     dtype="float32",
                     callback=self._enqueue(self.spk_queue),
                 )
-                if use_flag:
-                    params["loopback"] = True
-                self._spk_stream = sd.InputStream(**params)
                 self._spk_stream.start()
                 logging.info("Speaker loopback restarted on device %s", target)
             except TypeError:
@@ -338,9 +335,9 @@ class AudioRecorder:
         if self._sc_thread and self._sc_thread.is_alive():
             return
         try:
-            speaker = sc.default_speaker()
+            speaker = getattr(sc, "default_speaker", lambda: None)()
             if speaker is None:
-                speakers = sc.all_speakers()
+                speakers = getattr(sc, "all_speakers", lambda: [])()
                 speaker = speakers[0] if speakers else None
             if speaker is None:
                 logging.error("No speaker found for soundcard loopback fallback.")
@@ -350,11 +347,21 @@ class AudioRecorder:
 
             def run() -> None:
                 try:
-                    with speaker.recorder(samplerate=self.sample_rate, channels=1) as rec:
-                        while not self._sc_stop.is_set() and self._running.is_set():
-                            data = rec.record(numframes=1024)
+                    while not self._sc_stop.is_set() and self._running.is_set():
+                        if hasattr(speaker, "recorder"):
+                            with speaker.recorder(samplerate=self.sample_rate, channels=1) as rec:
+                                while not self._sc_stop.is_set() and self._running.is_set():
+                                    data = rec.record(numframes=1024)
+                                    if data is not None:
+                                        self.spk_queue.put(np.asarray(data, dtype="float32"))
+                        elif hasattr(speaker, "record"):
+                            data = speaker.record(numframes=1024, samplerate=self.sample_rate, channels=1)
                             if data is not None:
                                 self.spk_queue.put(np.asarray(data, dtype="float32"))
+                            time.sleep(0.01)
+                        else:
+                            logging.error("Speaker does not support recorder/record methods.")
+                            break
                 except Exception as exc_inner:
                     logging.error("Soundcard loopback thread failed: %s", exc_inner)
 
