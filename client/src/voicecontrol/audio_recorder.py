@@ -4,7 +4,6 @@ import logging
 import queue
 import threading
 import time
-from pathlib import Path
 from typing import Callable, Optional
 import sys
 
@@ -27,18 +26,16 @@ except ImportError as exc:  # pragma: no cover - runtime guard
 
 
 class AudioRecorder:
-    """Capture system audio and write chunked WAV files."""
+    """Capture system audio and stream chunked WAV payloads."""
 
     def __init__(
         self,
-        output_dir: Path,
         chunk_seconds: int = 30,
         sample_rate: int = 48_000,
         on_chunk: Optional[Callable[[str, bytes], None]] = None,
         spk_device: Optional[int] = None,
         mic_device: Optional[int] = None,
     ) -> None:
-        self.output_dir = output_dir
         self.chunk_seconds = max(0.25, float(chunk_seconds))
         self.sample_rate = sample_rate
         self.on_chunk = on_chunk
@@ -108,7 +105,6 @@ class AudioRecorder:
     def start(self) -> None:
         if self._running.is_set():
             return
-        self.output_dir.mkdir(parents=True, exist_ok=True)
         self._reset_buffers()
         self._start_mono = time.monotonic()
         self._running.set()

@@ -1,7 +1,6 @@
 import logging
 import queue
 import threading
-from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import urljoin
 

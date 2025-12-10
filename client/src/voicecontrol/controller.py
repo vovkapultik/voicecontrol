@@ -28,16 +28,17 @@ class AppController:
         self.recorder = recorder
         self.device_status = DeviceStatus("", "red", None)
         self.mic_status = DeviceStatus("", "red", None)
+        self.is_recording = False
 
     # Recording control -------------------------------------------------
     def start_recording(self) -> tuple[bool, str]:
         try:
             self.recorder.chunk_seconds = self.config.config.chunk_seconds
             self.recorder.start()
-            self.config.update(recording_enabled=True)
+            self.is_recording = True
             return True, "Recording"
         except Exception as exc:
-            self.config.update(recording_enabled=False)
+            self.is_recording = False
             try:
                 self.recorder.stop()
             except Exception:
@@ -48,7 +49,7 @@ class AppController:
     def stop_recording(self) -> tuple[bool, str]:
         try:
             self.recorder.stop()
-            self.config.update(recording_enabled=False)
+            self.is_recording = False
             return True, "Stopped"
         except Exception as exc:
             logging.exception("Failed to stop recording: %s", exc)
@@ -56,11 +57,11 @@ class AppController:
 
     def toggle_recording(self) -> tuple[bool, str, bool]:
         """Toggle recording. Returns (ok, message, is_recording_now)."""
-        if self.config.config.recording_enabled:
+        if self.is_recording:
             ok, msg = self.stop_recording()
             return ok, msg, False
         ok, msg = self.start_recording()
-        return ok, msg, ok
+        return ok, msg, ok if ok else False
 
     # Device selection --------------------------------------------------
     def available_devices(self) -> List[tuple[int, str]]:
@@ -94,7 +95,7 @@ class AppController:
         return devices, chosen, self.mic_status
 
     def set_device(self, device_selection: Optional[int]) -> DeviceStatus:
-        was_running = self.config.config.recording_enabled
+        was_running = self.is_recording
         if was_running:
             self.stop_recording()
 
@@ -109,7 +110,7 @@ class AppController:
         return self.device_status
 
     def set_mic(self, device_selection: Optional[int]) -> DeviceStatus:
-        was_running = self.config.config.recording_enabled
+        was_running = self.is_recording
         if was_running:
             self.stop_recording()
 

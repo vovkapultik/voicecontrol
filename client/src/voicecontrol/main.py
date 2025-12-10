@@ -3,7 +3,6 @@ import os
 import signal
 import sys
 import atexit
-from pathlib import Path
 
 from .audio_recorder import AudioRecorder
 from .auth import MasterPasswordProvider
@@ -96,7 +95,6 @@ def main() -> None:
                 logging.debug("Could not enumerate devices: %s", exc)
 
     recorder = AudioRecorder(
-        output_dir=cfg_mgr.recordings_dir(),
         chunk_seconds=cfg_mgr.config.chunk_seconds,
         sample_rate=cfg_mgr.config.sample_rate,
         on_chunk=chunk_ready,

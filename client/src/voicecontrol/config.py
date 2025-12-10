@@ -16,15 +16,12 @@ def _default_app_dir() -> Path:
 
 APP_DIR = _default_app_dir()
 CONFIG_PATH = APP_DIR / "config.json"
-RECORDINGS_DIR = APP_DIR / "recordings"
 
 
 @dataclass
 class ClientConfig:
     server_base: str = "http://localhost:8000"
     api_key: str = "changeme"
-    recording_enabled: bool = False
-    run_on_startup: bool = False
     chunk_seconds: float = 1.0
     sample_rate: int = 48_000
     spk_device: int | None = None
@@ -35,8 +32,6 @@ class ClientConfig:
         return cls(
             server_base=payload.get("server_base", cls.server_base),
             api_key=payload.get("api_key", cls.api_key),
-            recording_enabled=bool(payload.get("recording_enabled", cls.recording_enabled)),
-            run_on_startup=bool(payload.get("run_on_startup", cls.run_on_startup)),
             chunk_seconds=float(payload.get("chunk_seconds", cls.chunk_seconds)),
             sample_rate=int(payload.get("sample_rate", cls.sample_rate)),
             spk_device=payload.get("spk_device"),
@@ -50,23 +45,32 @@ class ConfigManager:
         self.config = ClientConfig()
         self.load()
 
-    def load(self) -> None:
+    def load(self, allow_env_overrides: bool | None = None) -> None:
         try:
             load_dotenv()
-            if self.path.exists():
+            existing_file = self.path.exists()
+            if existing_file:
                 with self.path.open("r", encoding="utf-8") as fh:
                     raw = json.load(fh)
                 self.config = ClientConfig.from_dict(raw)
             else:
                 self.save()
 
-            # Override server_base and api_key from environment (.env), if provided.
-            env_server = os.getenv("SERVER_BASE")
-            env_key = os.getenv("API_KEY")
-            if env_server:
-                self.config.server_base = env_server
-            if env_key:
-                self.config.api_key = env_key
+            # Override server_base and api_key from environment (.env) only on first load
+            # (when no config file exists) so UI saves are not immediately overwritten.
+            use_env = allow_env_overrides if allow_env_overrides is not None else not existing_file
+            env_applied = False
+            if use_env:
+                env_server = os.getenv("SERVER_BASE")
+                env_key = os.getenv("API_KEY")
+                if env_server:
+                    self.config.server_base = env_server
+                    env_applied = True
+                if env_key:
+                    self.config.api_key = env_key
+                    env_applied = True
+            if env_applied and not existing_file:
+                self.save()
             # Enforce fixed 1s chunks regardless of persisted/configured values.
             self.config.chunk_seconds = 1.0
         except Exception as exc:  # pragma: no cover - defensive
@@ -86,7 +90,5 @@ class ConfigManager:
             if hasattr(self.config, key):
                 setattr(self.config, key, value)
         self.save()
-
-    def recordings_dir(self) -> Path:
-        RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
-        return RECORDINGS_DIR
+        # Reload to ensure in-memory config reflects persisted values (avoids stale env overrides on next load).
+        self.load()

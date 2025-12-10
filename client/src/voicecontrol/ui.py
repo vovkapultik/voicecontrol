@@ -51,8 +51,6 @@ class AppUI:
         # self._master_password, self._offline = self.password_provider.fetch()
         # self._show_login()
         # Always start in a stopped state.
-        if self.config.config.recording_enabled:
-            self.config.update(recording_enabled=False)
         self.root.deiconify()
         self._build_main()
         self.root.mainloop()
@@ -70,14 +68,15 @@ class AppUI:
             pass
         style.configure("Base.TFrame", background=colors["bg"])
         style.configure("Card.TFrame", background=colors["surface"])
-        style.configure("Title.TLabel", background=colors["bg"], foreground=colors["fg"], font=("Segoe UI", 16, "bold"))
-        style.configure("Section.TLabel", background=colors["bg"], foreground=colors["fg"], font=("Segoe UI", 12, "bold"))
+        style.configure("Title.TLabel", background=colors["bg"], foreground=colors["fg"], font=("Segoe UI", 14, "bold"))
+        style.configure("Section.TLabel", background=colors["bg"], foreground=colors["fg"], font=("Segoe UI", 11, "bold"))
         style.configure("Label.TLabel", background=colors["surface"], foreground=colors["fg"], font=("Segoe UI", 10, "bold"))
         style.configure("Value.TLabel", background=colors["surface"], foreground=colors["fg"], font=("Segoe UI", 10))
-        style.configure("Subtle.TLabel", background=colors["bg"], foreground=colors["muted"], font=("Segoe UI", 10))
+        style.configure("Subtle.TLabel", background=colors["bg"], foreground=colors["muted"], font=("Segoe UI", 9))
         style.configure("Muted.TLabel", background=colors["surface"], foreground=colors["muted"], font=("Segoe UI", 9))
-        style.configure("Primary.TButton", background=colors["primary"], foreground=colors["bg"], font=("Segoe UI", 11, "bold"), padding=8)
-        style.configure("Secondary.TButton", background=colors["surface"], foreground=colors["fg"], font=("Segoe UI", 10, "bold"))
+        style.configure("Primary.TButton", background=colors["primary"], foreground=colors["bg"], font=("Segoe UI", 10, "bold"), padding=6)
+        style.configure("Secondary.TButton", background=colors["primary"], foreground=colors["bg"], font=("Segoe UI", 10, "bold"), padding=6)
+        style.configure("Danger.TButton", background=colors["danger"], foreground=colors["bg"], font=("Segoe UI", 10, "bold"), padding=6)
         style.map(
             "Primary.TButton",
             background=[("active", colors["primary_active"])],
@@ -91,13 +90,13 @@ class AppUI:
 
     def _build_main(self) -> None:
         self.root.title("VoiceControl Client")
-        self.root.geometry("560x620")
+        self.root.geometry("480x520")
         self.root.resizable(False, False)
         self.root.configure(bg=self._colors["bg"])
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self._build_style()
 
-        padding_y = (0, 14)
+        padding_y = (0, 10)
         container = ttk.Frame(self.root, style="Base.TFrame")
         container.pack(fill="both", expand=True)
 
@@ -107,7 +106,7 @@ class AppUI:
         scrollbar.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
 
-        main = ttk.Frame(canvas, padding=18, style="Base.TFrame")
+        main = ttk.Frame(canvas, padding=12, style="Base.TFrame")
         canvas_window = canvas.create_window((0, 0), window=main, anchor="nw")
 
         def _configure_scroll(_event=None) -> None:
@@ -121,25 +120,11 @@ class AppUI:
         header.pack(fill="x", pady=(0, 10))
         ttk.Label(header, text="VoiceControl", style="Title.TLabel").pack(anchor="w")
 
-        status_card = ttk.Frame(main, style="Card.TFrame", padding=14)
+        status_card = ttk.Frame(main, style="Card.TFrame", padding=10)
         status_card.pack(fill="x", pady=padding_y)
-        status_row = ttk.Frame(status_card, style="Card.TFrame")
-        status_row.grid(row=0, column=0, sticky="we")
-        self._status_badge = tk.Label(
-            status_row,
-            textvariable=self.status_var,
-            bg=self._colors["danger"],
-            fg=self._colors["bg"],
-            font=("Segoe UI", 12, "bold"),
-            padx=12,
-            pady=6,
-        )
-        self._status_badge.pack(side="left")
-        ttk.Label(status_row, textvariable=self.chunk_text_var, style="Value.TLabel").pack(side="left", padx=12)
-        ttk.Label(status_row, text="1s slices sent as they are ready", style="Muted.TLabel").pack(side="left", padx=4)
-
-        self._toggle_btn = ttk.Button(status_card, text="Start Recording", command=self._toggle_recording, style="Primary.TButton")
-        self._toggle_btn.grid(row=1, column=0, sticky="we", pady=(12, 0))
+        status_card.columnconfigure(0, weight=1)
+        self._toggle_btn = ttk.Button(status_card, text="Start Streaming", command=self._toggle_recording, style="Primary.TButton")
+        self._toggle_btn.grid(row=0, column=0, sticky="we", padx=4, pady=(0, 2))
 
         devices_section = ttk.Frame(main, style="Base.TFrame")
         devices_section.pack(fill="x", pady=padding_y)
@@ -169,23 +154,27 @@ class AppUI:
             label_attr="_mic_status_label",
         )
 
-        connection_card = ttk.Frame(main, style="Card.TFrame", padding=14)
+        connection_card = ttk.Frame(main, style="Card.TFrame", padding=10)
         connection_card.pack(fill="x", pady=padding_y)
-        connection_card.columnconfigure(1, weight=1)
+        connection_card.columnconfigure(0, weight=1)
+
         ttk.Label(connection_card, text="Server URL", style="Label.TLabel").grid(row=0, column=0, sticky="w")
-        server_entry = ttk.Entry(connection_card, textvariable=self.server_var, width=42)
-        server_entry.grid(row=0, column=1, sticky="we")
-        ttk.Button(connection_card, text="Save URL", command=self._save_server_base, style="Secondary.TButton").grid(
-            row=0, column=2, sticky="e", padx=(10, 0)
+        server_row = ttk.Frame(connection_card, style="Card.TFrame")
+        server_row.grid(row=1, column=0, sticky="we", pady=(4, 8))
+        server_row.columnconfigure(0, weight=1)
+        ttk.Entry(server_row, textvariable=self.server_var).grid(row=0, column=0, sticky="we")
+        ttk.Button(server_row, text="Save", command=self._save_server_base, style="Secondary.TButton").grid(
+            row=0, column=1, sticky="e", padx=(8, 0)
         )
-        ttk.Label(connection_card, text="API key", style="Label.TLabel").grid(row=1, column=0, sticky="w", pady=(12, 0))
-        ttk.Label(connection_card, textvariable=self.api_key_display_var, style="Value.TLabel").grid(
-            row=1, column=1, sticky="w", pady=(12, 0)
+
+        ttk.Label(connection_card, text="API key", style="Label.TLabel").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        api_row = ttk.Frame(connection_card, style="Card.TFrame")
+        api_row.grid(row=3, column=0, sticky="we")
+        api_row.columnconfigure(0, weight=1)
+        ttk.Entry(api_row, textvariable=self.api_key_var).grid(row=0, column=0, sticky="we")
+        ttk.Button(api_row, text="Save", command=self._save_api_key, style="Secondary.TButton").grid(
+            row=0, column=1, sticky="e", padx=(8, 0)
         )
-        ttk.Label(connection_card, text="Enter or update your key", style="Muted.TLabel").grid(row=2, column=0, columnspan=2, sticky="w", pady=(10, 2))
-        api_entry = ttk.Entry(connection_card, textvariable=self.api_key_var, width=38)
-        api_entry.grid(row=3, column=0, columnspan=2, sticky="we")
-        ttk.Button(connection_card, text="Save API Key", command=self._save_api_key, style="Primary.TButton").grid(row=4, column=0, columnspan=2, sticky="we", pady=(10, 0))
 
         if self._offline:
             self.offline_var.set("No internet access - using default password.")
@@ -198,10 +187,6 @@ class AppUI:
             tk.Label(main, fg=self._colors["danger"], bg=self._colors["bg"], textvariable=self.loopback_missing_var, wraplength=480, justify="left").pack(
                 fill="x", pady=(0, 8)
             )
-
-        footer = ttk.Frame(main, style="Base.TFrame")
-        footer.pack(fill="x", pady=(6, 0))
-        ttk.Button(footer, text="Quit", command=self.root.quit, style="Secondary.TButton").pack(side="right")
 
         # Set initial status colors.
         self._set_status("Stopped", self._colors["danger"])
@@ -256,7 +241,7 @@ class AppUI:
     def _save_api_key(self) -> None:
         key = self.api_key_var.get().strip()
         self.config.update(api_key=key)
-        self.api_key_display_var.set(self._mask_key(key))
+        self.api_key_var.set(self.config.config.api_key)
         messagebox.showinfo("Saved", "API key updated.")
 
     def _save_server_base(self) -> None:
@@ -265,16 +250,16 @@ class AppUI:
             messagebox.showerror("Invalid URL", "Server URL cannot be empty.")
             return
         self.config.update(server_base=value)
-        self.server_var.set(value)
+        self.server_var.set(self.config.config.server_base)
         if self.uploader:
             try:
-                self.uploader.set_server_base(value)
+                self.uploader.set_server_base(self.config.config.server_base)
             except Exception:
                 messagebox.showerror("Server URL", "Could not apply server URL to uploader.")
-        messagebox.showinfo("Saved", f"Server URL set to {value}")
+        messagebox.showinfo("Saved", f"Server URL set to {self.config.config.server_base}")
 
     def _save_speaker_selection(self, selection: str) -> None:
-        was_running = self.config.config.recording_enabled
+        was_running = self.controller.is_recording
         if was_running:
             self._stop_recording()
         status = self.controller.set_device(self._parse_selection(selection))
@@ -283,7 +268,7 @@ class AppUI:
             self._start_recording()
 
     def _save_mic_selection(self, selection: str) -> None:
-        was_running = self.config.config.recording_enabled
+        was_running = self.controller.is_recording
         if was_running:
             self._stop_recording()
         mic_status = self.controller.set_mic(self._parse_selection(selection))
@@ -325,9 +310,12 @@ class AppUI:
     def _start_recording(self) -> None:
         ok, msg = self.controller.start_recording()
         color = self._colors["success"] if ok else self._colors["danger"]
-        self._set_status("Recording" if ok else msg, color)
+        self._set_status("Streaming" if ok else msg, color)
         if self._toggle_btn:
-            self._toggle_btn.config(text="Stop Recording" if ok else "Start Recording")
+            self._toggle_btn.config(
+                text="Stop Streaming" if ok else "Start Streaming",
+                style="Danger.TButton" if ok else "Primary.TButton",
+            )
         if not ok:
             messagebox.showerror("Error", msg)
 
@@ -335,22 +323,23 @@ class AppUI:
         ok, msg = self.controller.stop_recording()
         self._set_status("Stopped", self._colors["danger"])
         if self._toggle_btn:
-            self._toggle_btn.config(text="Start Recording")
+            self._toggle_btn.config(text="Start Streaming", style="Primary.TButton")
         if not ok:
             messagebox.showerror("Error", msg)
 
     def _toggle_recording(self) -> None:
         ok, msg, is_recording = self.controller.toggle_recording()
-        if is_recording:
-            self._set_status("Recording", self._colors["success"])
-            if self._toggle_btn:
-                self._toggle_btn.config(text="Stop Recording")
-        else:
-            self._set_status("Stopped", self._colors["danger"])
-            if self._toggle_btn:
-                self._toggle_btn.config(text="Start Recording")
         if not ok:
             messagebox.showerror("Error", msg)
+            return
+        if is_recording:
+            self._set_status("Streaming", self._colors["success"])
+            if self._toggle_btn:
+                self._toggle_btn.config(text="Stop Streaming", style="Danger.TButton")
+            return
+        self._set_status("Stopped", self._colors["danger"])
+        if self._toggle_btn:
+            self._toggle_btn.config(text="Start Streaming", style="Primary.TButton")
 
     def _set_status(self, text: str, color: str) -> None:
         self.status_var.set(text)
