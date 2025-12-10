@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>VoiceControl Admin</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    body { font-family: Arial, sans-serif; background: #0d1117; color: #e6edf3; margin: 0; padding: 0; display: flex; flex-direction: column; min-height: 100vh; }
+    header { padding: 10px 24px; border-bottom: 1px solid #30363d; background: #161b22; display: flex; align-items: center; justify-content: space-between; }
+    main { flex: 1; padding: 24px; max-width: 1100px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+    input, button { padding: 10px 12px; border-radius: 6px; border: 1px solid #30363d; background: #161b22; color: #e6edf3; width: 100%; box-sizing: border-box; }
+    button { background: #238636; border: none; cursor: pointer; }
+    button.secondary { background: #30363d; }
+    button:disabled { opacity: 0.6; cursor: default; }
+    .card { border: 1px solid #30363d; padding: 16px; margin-bottom: 16px; border-radius: 10px; background: #161b22; box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
+    h1 { margin: 0; font-size: 22px; font-weight: 600; }
+    h2 { margin: 0 0 10px 0; font-size: 18px; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px; border-bottom: 1px solid #30363d; text-align: left; }
+    .muted { color: #8b949e; }
+    .error { color: #f85149; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .row .field { flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 6px; }
+    .login-wrap { display: flex; justify-content: center; align-items: center; padding: 48px 0; }
+    .login-card { width: 360px; padding: 20px; }
+    .login-card .row { flex-direction: column; gap: 0; }
+    .login-card .row .field { width: 100%; }
+    .login-card .field + .field { margin-top: 12px; }
+    .card .row { margin-top: 8px; }
+    .card + .card { margin-top: 20px; }
+    .app-shell { display: flex; gap: 16px; }
+    .sidebar { width: 200px; border: 1px solid #30363d; border-radius: 10px; background: #161b22; padding: 12px; height: fit-content; display: flex; flex-direction: column; gap: 8px; }
+    .nav-btn { width: 100%; text-align: left; padding: 10px 12px; background: #161b22; border: 1px solid #30363d; border-radius: 8px; color: #e6edf3; cursor: pointer; }
+    .nav-btn.active { background: #238636; border-color: #238636; }
+    .content-area { flex: 1; }
+    .section { display: none; }
+    .section.active { display: block; }
+    .header-actions { display: none; gap: 8px; align-items: center; }
+    .toast-container { position: fixed; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 8px; z-index: 1000; }
+    .toast { padding: 10px 12px; border-radius: 8px; border: 1px solid #30363d; background: #161b22; color: #e6edf3; box-shadow: 0 8px 24px rgba(0,0,0,0.25); min-width: 220px; }
+    .toast.success { border-color: #238636; }
+    .toast.error { border-color: #f85149; }
+    .icon-btn { width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border-radius: 8px; }
+    .listen-btn { display: inline-flex; align-items: center; justify-content: center; padding: 10px 16px; min-width: 110px; border-radius: 8px; font-weight: 600; }
+    .status-pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 999px; border: 1px solid #30363d; background: #161b22; }
+    .status-pill::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: #8b949e; }
+    .status-muted::before { background: #8b949e; }
+    .status-green::before { background: #2ea043; box-shadow: 0 0 0 6px rgba(46, 160, 67, 0.18); }
+    .status-yellow::before { background: #f2cc60; box-shadow: 0 0 0 6px rgba(242, 204, 96, 0.18); }
+    .status-red::before { background: #f85149; box-shadow: 0 0 0 6px rgba(248, 81, 73, 0.18); }
+    .spinner { width: 42px; height: 42px; border: 4px solid #1f2328; border-top-color: #9ba1a6; border-radius: 50%; animation: spin 0.9s linear infinite; margin: 0 auto; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .pill { display: inline-block; padding: 4px 8px; border-radius: 999px; background: #238636; color: #0d1117; font-size: 12px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>VoiceControl Admin</h1>
+    <div class="header-actions" id="header-actions">
+      <span id="session-status" class="muted"></span>
+      <button class="secondary" onclick="logout()" style="width:auto;">Logout</button>
+    </div>
+  </header>
+  <main>
+    <div class="toast-container" id="toast-container"></div>
+    <div class="login-wrap" id="loading" style="display:none; min-height: calc(100vh - 30px); padding: 0; justify-content: center; align-items: center;">
+      <div class="spinner" aria-label="Loading"></div>
+    </div>
+    <div class="login-wrap" id="login-card">
+      <div class="card login-card">
+        <h2>Sign in</h2>
+        <div class="field">
+          <label for="email" class="muted">Email</label>
+          <input id="email" placeholder="admin@example.com">
+        </div>
+        <div class="field">
+          <label for="password" class="muted">Password</label>
+          <input id="password" type="password" placeholder="••••••••">
+        </div>
+        <div class="row" style="align-items:center; margin-top: 12px;">
+          <button onclick="login()">Login</button>
+          <span id="login-status" class="muted"></span>
+        </div>
+      </div>
+    </div>
+
+    <div id="app-content" style="display:none">
+      <div class="app-shell">
+        <div class="sidebar">
+          <button class="nav-btn" onclick="showTab('rooms')" id="tab-btn-rooms" title="Rooms">Rooms</button>
+          <button class="nav-btn active" onclick="showTab('users')" id="tab-btn-users" title="Users">Users</button>
+          <button class="nav-btn" onclick="showTab('admins')" id="tab-btn-admins" title="Admins">Admins</button>
+        </div>
+        <div class="content-area">
+          <div class="section active" id="tab-users">
+            <div class="card">
+              <h2>Create User</h2>
+              <div class="row">
+                <div class="field">
+                  <label for="user-name" class="muted">Name</label>
+                  <input id="user-name" placeholder="name">
+                </div>
+              </div>
+              <div class="row" style="align-items:center; margin-top: 12px;">
+                <button onclick="createUser()">Create</button>
+                <span id="user-status" class="muted"></span>
+              </div>
+            </div>
+            <div class="card">
+              <h2>Users</h2>
+              <div id="users"></div>
+            </div>
+          </div>
+
+          <div class="section" id="tab-admins">
+            <div class="card">
+              <h2>Create Admin</h2>
+              <div class="row">
+                <div class="field">
+                  <label for="admin-email" class="muted">Email</label>
+                  <input id="admin-email" placeholder="email">
+                </div>
+                <div class="field">
+                  <label for="admin-password" class="muted">Password</label>
+                  <input id="admin-password" type="password" placeholder="password">
+                </div>
+              </div>
+              <div class="row" style="align-items:center; margin-top: 12px;">
+                <button onclick="createAdmin()">Create</button>
+                <span id="admin-status" class="muted"></span>
+              </div>
+            </div>
+            <div class="card">
+              <h2>Admins</h2>
+              <div id="admins"></div>
+            </div>
+          </div>
+
+          <div class="section" id="tab-rooms">
+            <div class="card">
+              <h2>Active Rooms</h2>
+              <div id="rooms"></div>
+            </div>
+            <div class="card">
+              <h2>Listener</h2>
+              <div class="row" style="align-items:center;">
+                <span id="listen-status" class="status-pill status-muted">Not listening</span>
+                <button class="secondary" onclick="stopListening()" style="width:auto;">Stop</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let roomsInterval = null;
+    let audioSocket = null;
+    let listeningRoomId = null;
+    let audioReconnectTimer = null;
+    let audioInactivityTimer = null;
+    let audioWarningTimer = null;
+    let audioWarningInterval = null;
+    const roomNameCache = {};
+    let isLoading = false;
+    function token() {
+      return localStorage.getItem("token") || "";
+    }
+    function setStatus(id, msg, error) {
+      const el = document.getElementById(id);
+      el.textContent = msg;
+      el.className = error ? "error" : "muted";
+    }
+    function notify(message, type="success", ttl=3000) {
+      const container = document.getElementById("toast-container");
+      const toast = document.createElement("div");
+      toast.className = "toast " + type;
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = "0";
+        setTimeout(() => container.removeChild(toast), 300);
+      }, ttl);
+    }
+    function showLoading(on) {
+      isLoading = !!on;
+      const loading = document.getElementById("loading");
+      if (loading) loading.style.display = on ? "flex" : "none";
+      if (on) {
+        document.getElementById("app-content").style.display = "none";
+        document.getElementById("login-card").style.display = "none";
+      }
+    }
+    function setLoggedIn(ok) {
+      document.getElementById("app-content").style.display = ok && !isLoading ? "block" : "none";
+      document.getElementById("login-card").style.display = ok || isLoading ? "none" : "block";
+      const header = document.getElementById("header-actions");
+      header.style.display = ok ? "flex" : "none";
+      document.getElementById("session-status").textContent = ok ? "Signed in" : "";
+    }
+    function setListenStatus(text, variant="muted") {
+      const status = document.getElementById("listen-status");
+      if (!status) return;
+      status.textContent = text;
+      status.className = `status-pill status-${variant}`;
+    }
+    async function copyApiKey(key) {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(key);
+          notify("API key copied");
+          return;
+        }
+      } catch (err) {
+        // fall back below
+        // fall back below
+      }
+      const ta = document.createElement("textarea");
+      ta.value = key;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+        notify("API key copied");
+      } catch (err) {
+        notify("Copy failed", "error");
+      } finally {
+        document.body.removeChild(ta);
+      }
+    }
+    function logout() {
+      localStorage.removeItem("token");
+      stopRoomsPolling();
+      stopListening();
+      showLoading(false);
+      setLoggedIn(false);
+    }
+    async function login() {
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+      const resp = await fetch("/admin/login", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({email, password}) });
+      if (resp.ok) {
+        const data = await resp.json();
+        localStorage.setItem("token", data.token);
+        setStatus("login-status", "Logged in");
+        setLoggedIn(true);
+        notify("Logged in");
+        showTab("rooms");
+        loadRooms();
+        loadUsers();
+        loadAdmins();
+      } else {
+        setStatus("login-status", "Login failed", true);
+        setLoggedIn(false);
+        notify("Login failed", "error");
+      }
+    }
+    async function createAdmin() {
+      const email = document.getElementById("admin-email").value;
+      const password = document.getElementById("admin-password").value;
+      const resp = await fetch("/admin/admins", { method: "POST", headers: {"Content-Type": "application/json", "Authorization": "Bearer " + token()}, body: JSON.stringify({email, password}) });
+      setStatus("admin-status", resp.ok ? "Admin created" : "Error creating admin", !resp.ok);
+      if (resp.ok) {
+        notify("Admin created");
+        loadAdmins();
+      } else {
+        notify("Error creating admin", "error");
+      }
+    }
+    async function createUser() {
+      const name = document.getElementById("user-name").value;
+      const resp = await fetch("/admin/users", { method: "POST", headers: {"Content-Type": "application/json", "Authorization": "Bearer " + token()}, body: JSON.stringify({name}) });
+      if (resp.ok) {
+        const data = await resp.json();
+        setStatus("user-status", "User created.");
+        notify("User created. API key: " + data.api_key);
+        loadUsers();
+      } else {
+        setStatus("user-status", "Error creating user", true);
+        notify("Error creating user", "error");
+      }
+    }
+    async function loadUsers() {
+      const resp = await fetch("/admin/users", { headers: {"Authorization": "Bearer " + token()} });
+      if (resp.status === 401) {
+        localStorage.removeItem("token");
+        setLoggedIn(false);
+        showLoading(false);
+        return;
+      }
+      if (!resp.ok) {
+        showLoading(false);
+        return;
+      }
+      const users = await resp.json();
+      const div = document.getElementById("users");
+      const rows = users
+        .map(u => {
+          const rawId = (u.id ?? u._id ?? "");
+          const safeId = rawId === null ? "" : String(rawId);
+          if (invalidUserId(safeId)) return null;
+          return `
+          <tr>
+            <td><input data-user-id="${safeId}" value="${u.name}" style="width: 100%;"></td>
+            <td style="display:flex; align-items:center; gap:8px;">
+              <span>${u.api_key}</span>
+              <button class="icon-btn secondary" title="Copy API key" onclick="copyApiKey('${u.api_key}')"><i class="fa-solid fa-copy"></i></button>
+            </td>
+            <td>
+              <button title="Save name" onclick="updateUserName('${safeId}')" class="icon-btn"><i class="fa-solid fa-floppy-disk"></i></button>
+              <button title="Refresh API key" onclick="refreshApiKey('${safeId}')" class="icon-btn"><i class="fa-solid fa-rotate-right"></i></button>
+              <button class="secondary icon-btn" title="Delete user" onclick="deleteUser('${safeId}')"><i class="fa-solid fa-trash"></i></button>
+            </td>
+          </tr>`;
+        })
+        .filter(Boolean);
+      if (!rows.length) {
+        div.innerHTML = "<p class='muted'>No valid users found.</p>";
+      } else {
+        div.innerHTML = "<table><tr><th>Name</th><th>API Key</th><th>Actions</th></tr>" + rows.join("") + "</table>";
+      }
+      showLoading(false);
+    }
+    function invalidUserId(userId) {
+      return !userId || ["none","null","undefined",""]
+.includes(String(userId).toLowerCase());
+    }
+    async function updateUserName(userId) {
+      if (invalidUserId(userId)) {
+        return;
+      }
+      const input = document.querySelector(`input[data-user-id='${userId}']`);
+      const name = input ? input.value : "";
+      const resp = await fetch(`/admin/users/${userId}`, { method: "PATCH", headers: {"Content-Type": "application/json", "Authorization": "Bearer " + token()}, body: JSON.stringify({name}) });
+      if (!resp.ok) {
+        notify("Failed to update name", "error");
+      } else {
+        loadUsers();
+        notify("Name saved");
+      }
+    }
+    async function refreshApiKey(userId) {
+      if (invalidUserId(userId)) return;
+      const resp = await fetch(`/admin/users/${userId}/refresh-key`, { method: "POST", headers: {"Authorization": "Bearer " + token()} });
+      if (resp.ok) {
+        const data = await resp.json();
+        notify("New API key generated: " + data.api_key);
+        loadUsers();
+      } else {
+        notify("Failed to refresh key", "error");
+      }
+    }
+    async function deleteUser(userId) {
+      if (invalidUserId(userId)) return;
+      if (!confirm("Delete this user?")) return;
+      const resp = await fetch(`/admin/users/${userId}`, { method: "DELETE", headers: {"Authorization": "Bearer " + token()} });
+      if (!resp.ok) {
+        notify("Failed to delete user", "error");
+      } else {
+        loadUsers();
+        notify("User deleted");
+      }
+    }
+    async function loadAdmins() {
+      const resp = await fetch("/admin/admins", { headers: {"Authorization": "Bearer " + token()} });
+      if (!resp.ok) {
+        if (resp.status === 401) logout();
+        document.getElementById("admins").innerHTML = "<p class='error'>Failed to load admins</p>";
+        showLoading(false);
+        return;
+      }
+      const admins = await resp.json();
+      const div = document.getElementById("admins");
+      if (!admins.length) {
+        div.innerHTML = "<p class='muted'>No admins found.</p>";
+        showLoading(false);
+        return;
+      }
+      div.innerHTML = "<table><tr><th>Email</th><th>Actions</th></tr>" + admins.map(a => {
+        const adminId = String(a.id || a._id || "");
+        return `
+          <tr>
+            <td>${a.email}</td>
+            <td>
+              <button class="secondary icon-btn" title="Delete admin" onclick="deleteAdmin('${adminId}')"><i class="fa-solid fa-trash"></i></button>
+            </td>
+          </tr>
+        `;
+      }).join("") + "</table>";
+      showLoading(false);
+    }
+    async function deleteAdmin(adminId) {
+      if (invalidUserId(adminId)) return;
+      if (!confirm("Delete this admin?")) return;
+      const resp = await fetch(`/admin/admins/${adminId}`, { method: "DELETE", headers: {"Authorization": "Bearer " + token()} });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        notify(err.detail || "Failed to delete admin", "error");
+      } else {
+        notify("Admin deleted");
+        loadAdmins();
+      }
+    }
+    async function loadRooms() {
+      const resp = await fetch("/admin/rooms", { headers: {"Authorization": "Bearer " + token()} });
+      if (!resp.ok) {
+        if (resp.status === 401) logout();
+        showLoading(false);
+        return;
+      }
+      const rooms = (await resp.json()).filter(r => {
+        const last = new Date(r.last_seen).getTime();
+        return Date.now() - last <= 10000; // hide inactive rooms quickly
+      });
+      rooms.forEach(r => roomNameCache[r.user_id] = r.name || r.user_id);
+      const div = document.getElementById("rooms");
+      if (!rooms.length) {
+        div.innerHTML = "<p class='muted'>No active rooms in the last few minutes.</p>";
+        updateListenStatus();
+        return;
+      }
+      div.innerHTML = "<table><tr><th>Name</th><th>Last audio</th><th>Actions</th></tr>" + rooms.map(r => {
+        const last = new Date(r.last_seen);
+        const active = listeningRoomId === r.user_id;
+        return `
+          <tr>
+            <td>${r.name || r.user_id}</td>
+            <td><span class="muted">${last.toLocaleTimeString()}</span></td>
+            <td>
+              <button class="listen-btn ${active ? "active" : ""}" data-room-id="${r.user_id}" onclick="listenToRoom('${r.user_id}')" title="Listen">
+                ${active ? "Listening" : "Listen"}
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join("") + "</table>";
+      updateListenStatus();
+    }
+    function startRoomsPolling() {
+      loadRooms();
+      if (roomsInterval) clearInterval(roomsInterval);
+      roomsInterval = setInterval(loadRooms, 2000);
+    }
+    function stopRoomsPolling() {
+      if (roomsInterval) {
+        clearInterval(roomsInterval);
+        roomsInterval = null;
+      }
+    }
+    function listenToRoom(roomId) {
+      listeningRoomId = roomId;
+      connectAudioSocket();
+      updateListenStatus();
+      notify("Listening to " + (roomNameCache[roomId] || "room"));
+      resetAudioInactivityTimer();
+      setListenStatus("Listening… awaiting audio", "yellow");
+    }
+    function stopListening(keepStatus=false) {
+      listeningRoomId = null;
+      if (audioReconnectTimer) {
+        clearTimeout(audioReconnectTimer);
+        audioReconnectTimer = null;
+      }
+      if (audioInactivityTimer) {
+        clearTimeout(audioInactivityTimer);
+        audioInactivityTimer = null;
+      }
+      if (audioSocket) {
+        audioSocket.close();
+        audioSocket = null;
+      }
+      if (audioWarningTimer) {
+        clearTimeout(audioWarningTimer);
+        audioWarningTimer = null;
+      }
+      if (audioWarningInterval) {
+        clearInterval(audioWarningInterval);
+        audioWarningInterval = null;
+      }
+      if (audioInactivityTimer) {
+        clearTimeout(audioInactivityTimer);
+        audioInactivityTimer = null;
+      }
+      updateListenStatus();
+      if (!keepStatus) {
+        setListenStatus("Not listening", "muted");
+      }
+    }
+    function connectAudioSocket() {
+      if (!listeningRoomId) return;
+      if (audioSocket) {
+        audioSocket.onclose = null;
+        audioSocket.close();
+        audioSocket = null;
+      }
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      const url = `${proto}://${location.host}/api/ws/audio?user_id=${encodeURIComponent(listeningRoomId)}`;
+      audioSocket = new WebSocket(url);
+      audioSocket.onmessage = handleAudioMessage;
+      audioSocket.onclose = () => {
+        audioSocket = null;
+        if (!listeningRoomId) return;
+        if (audioReconnectTimer) clearTimeout(audioReconnectTimer);
+        audioReconnectTimer = setTimeout(connectAudioSocket, 1000);
+      };
+    }
+    function handleAudioMessage(event) {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.kind !== "chunk") return;
+        roomNameCache[payload.user_id] = payload.user || payload.user_id;
+        if (listeningRoomId && payload.user_id === listeningRoomId) {
+          playAudioChunk(payload.data);
+          resetAudioInactivityTimer();
+          setListenStatus("Receiving audio", "green");
+          updateListenStatus();
+        }
+      } catch (err) {
+        console.error("Failed to handle audio event", err);
+      }
+    }
+    function playAudioChunk(base64Audio) {
+      try {
+        const bytes = Uint8Array.from(atob(base64Audio), c => c.charCodeAt(0));
+        const blob = new Blob([bytes], { type: "audio/wav" });
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audio.play().catch(() => {});
+        audio.onended = () => {
+          URL.revokeObjectURL(url);
+        };
+      } catch (err) {
+        console.error("Playback failed", err);
+      }
+    }
+    function updateListenStatus() {
+      document.querySelectorAll("button[data-room-id]").forEach(btn => {
+        const id = btn.getAttribute("data-room-id");
+        const active = id === listeningRoomId;
+        btn.textContent = active ? "Listening" : "Listen";
+        btn.classList.toggle("active", active);
+      });
+    }
+    function resetAudioInactivityTimer() {
+      if (audioInactivityTimer) clearTimeout(audioInactivityTimer);
+      if (audioWarningTimer) clearTimeout(audioWarningTimer);
+      if (audioWarningInterval) {
+        clearInterval(audioWarningInterval);
+        audioWarningInterval = null;
+      }
+      if (!listeningRoomId) return;
+      audioWarningTimer = setTimeout(() => {
+        let seconds = 3;
+        setListenStatus(`No audio for ${seconds}s`, "yellow");
+        audioWarningInterval = setInterval(() => {
+          seconds += 1;
+          setListenStatus(`No audio for ${seconds}s`, "yellow");
+        }, 1000);
+      }, 3000);
+      audioInactivityTimer = setTimeout(() => {
+        stopListening(false);
+      }, 10000);
+    }
+    function showTab(tab) {
+      ["users","admins","rooms"].forEach(t => {
+        const section = document.getElementById("tab-" + t);
+        const btn = document.getElementById("tab-btn-" + t);
+        if (section && btn) {
+          section.classList.toggle("active", t === tab);
+          btn.classList.toggle("active", t === tab);
+        }
+      });
+      if (tab === "rooms") {
+        startRoomsPolling();
+      } else if (tab === "users") {
+        stopRoomsPolling();
+        loadUsers();
+      } else if (tab === "admins") {
+        stopRoomsPolling();
+        loadAdmins();
+      } else {
+        stopRoomsPolling();
+      }
+    }
+    async function bootstrap() {
+      if (token()) {
+        showLoading(true);
+      } else {
+        showLoading(false);
+      }
+      if (token()) {
+        await loadRooms();
+        await loadUsers();
+        await loadAdmins();
+        if (localStorage.getItem("token")) {
+          setLoggedIn(true);
+          showTab("rooms");
+        }
+      }
+      updateListenStatus();
+    }
+    bootstrap();
+  </script>
+</body>
+</html>

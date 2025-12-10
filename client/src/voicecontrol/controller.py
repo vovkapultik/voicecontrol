@@ -6,7 +6,11 @@ from typing import Optional, Tuple, List
 
 from .config import ConfigManager
 from .audio_recorder import AudioRecorder
-from .devices import list_wasapi_loopback_devices, list_output_devices
+from .devices import (
+    list_wasapi_loopback_devices,
+    list_output_devices,
+    list_input_devices,
+)
 
 
 @dataclass
@@ -23,6 +27,7 @@ class AppController:
         self.config = config
         self.recorder = recorder
         self.device_status = DeviceStatus("", "red", None)
+        self.mic_status = DeviceStatus("", "red", None)
 
     # Recording control -------------------------------------------------
     def start_recording(self) -> tuple[bool, str]:
@@ -61,6 +66,9 @@ class AppController:
     def available_devices(self) -> List[tuple[int, str]]:
         return list_wasapi_loopback_devices() or list_output_devices() or []
 
+    def available_mics(self) -> List[tuple[int, str]]:
+        return list_input_devices() or []
+
     def auto_select_device(self) -> tuple[List[tuple[int, str]], Optional[tuple[int, str]], DeviceStatus]:
         devices = self.available_devices()
         chosen: Optional[tuple[int, str]] = None
@@ -72,6 +80,18 @@ class AppController:
         if chosen is None:
             self._clear_device()
         return devices, chosen, self.device_status
+
+    def auto_select_mic(self) -> tuple[List[tuple[int, str]], Optional[tuple[int, str]], DeviceStatus]:
+        devices = self.available_mics()
+        chosen: Optional[tuple[int, str]] = None
+        for idx, name in devices:
+            if self.recorder.probe_device(idx):
+                chosen = (idx, name)
+                self._apply_mic(idx, name, auto=True)
+                break
+        if chosen is None:
+            self._clear_mic()
+        return devices, chosen, self.mic_status
 
     def set_device(self, device_selection: Optional[int]) -> DeviceStatus:
         was_running = self.config.config.recording_enabled
@@ -87,6 +107,21 @@ class AppController:
         if was_running:
             self.start_recording()
         return self.device_status
+
+    def set_mic(self, device_selection: Optional[int]) -> DeviceStatus:
+        was_running = self.config.config.recording_enabled
+        if was_running:
+            self.stop_recording()
+
+        if device_selection is None:
+            self._clear_mic()
+        else:
+            name = self._mic_name(device_selection)
+            self._apply_mic(device_selection, name, auto=False)
+
+        if was_running:
+            self.start_recording()
+        return self.mic_status
 
     def _device_name(self, device_index: int) -> str:
         for idx, name in self.available_devices():
@@ -106,3 +141,22 @@ class AppController:
         self.device_status = DeviceStatus(
             text="We can't connect to any of your devices. Try manually.", color="red", selected=None
         )
+
+    def _apply_mic(self, device_index: int, name: str, auto: bool) -> None:
+        self.config.update(mic_device=device_index)
+        self.recorder.mic_device = device_index
+        text = f"Auto-selected mic {device_index}:{name}" if auto else f"Selected mic {device_index}:{name}"
+        self.mic_status = DeviceStatus(text=text, color="green", selected=(device_index, name))
+
+    def _clear_mic(self) -> None:
+        self.config.update(mic_device=None)
+        self.recorder.mic_device = None
+        self.mic_status = DeviceStatus(
+            text="We can't connect to any microphone. Try manually.", color="red", selected=None
+        )
+
+    def _mic_name(self, device_index: int) -> str:
+        for idx, name in self.available_mics():
+            if idx == device_index:
+                return name
+        return f"{device_index}"

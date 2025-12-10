@@ -1,30 +1,37 @@
-# VoiceControl Client
+# VoiceControl
 
-Python client for recording local system audio on Windows, gated by a master password fetched from the server. Source is under `src/voicecontrol`. The app is Windows-only (WASAPI loopback).
+Two-part setup for low-latency audio capture and playback:
+- `client/`: Windows client that records system audio via WASAPI loopback and streams chunks to the server.
+- `server/`: FastAPI-based stream server with a browser UI to monitor and play incoming audio in near real time.
 
-## Features
-- Fetches master password from `GET {server}/api/client/password`; falls back to `123456` and shows “No internet access” if unreachable.
-- Password-protected settings UI (Tk).
-- Start/stop recording, set chunk length, set API key, toggle “run on startup” flag (Windows registry HKCU Run entry), pick speaker device for loopback capture.
-- Captures local system audio via WASAPI loopback and saves chunked WAV files (default 30s) to `%LOCALAPPDATA%/voicecontrol/recordings`.
-- Hook in place (`on_chunk`) to stream uploaded chunks later.
-
-## Quickstart (Windows)
+## Server (stream target)
 ```bash
+cd server
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+export MONGO_URI="mongodb://localhost:27017"
+export MONGO_DB="voicecontrol"
+export JWT_SECRET="change-me"
+export ADMIN_EMAIL="admin@example.com"
+export ADMIN_PASSWORD="adminpass"
+# or place these in server/.env (auto-loaded)
+python -m app.main
+```
+Open `http://localhost:8000/` (admin portal) to log in (bootstrap admin is created from env vars above) and manage users; each user gets an API key for streaming. A simple WebSocket endpoint `/api/ws/audio` broadcasts incoming audio to connected listeners (e.g., build your own listener UI).
+
+## Client (Windows)
+```bash
+cd client
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 set PYTHONPATH=src
-python -m voicecontrol
+python app.py
 ```
+In Settings, set `server_base` (default `http://localhost:8000`) and `api_key` to match the server. Start recording; chunks (default 2s) upload to `/api/ingest` and play in the server UI.
 
-If the server is unreachable at launch, enter `123456` to unlock (UI will note offline mode).
-
-## Packaging hint
-- Bundle with PyInstaller when ready for distribution (install from `requirements-dev.txt`):
-  ```bash
-  pip install -r requirements-dev.txt
-  set PYTHONPATH=src
-  pyinstaller --onefile -w --name VoiceControlClient app.py
-  ```
-  The supported target is Windows; the artifact will be `dist/VoiceControlClient.exe`. Ensure PortAudio/WASAPI binaries and the VC runtime are present on the target; test the frozen binary for startup registration and device access. Code signing is recommended to reduce SmartScreen prompts.
+## Notes
+- Client remains Windows-only (WASAPI loopback via PyAudioWPatch).
+- Chunk streaming uses a background uploader with basic retry logging; uploaded files are deleted on success.
+- Adjust `chunk_seconds` for latency vs. overhead trade-offs. Longer chunks reduce request count; shorter chunks improve near-real-time playback.

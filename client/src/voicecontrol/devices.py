@@ -45,6 +45,21 @@ def list_output_devices() -> List[DeviceInfo]:
     return devices
 
 
+def list_input_devices() -> List[DeviceInfo]:
+    devices: List[DeviceInfo] = []
+    if not sys.platform.startswith("win"):
+        return devices
+    try:
+        with _pa() as pa:
+            for idx in range(pa.get_device_count()):
+                info = pa.get_device_info_by_index(idx)
+                if info.get("maxInputChannels", 0) > 0 and not info.get("isLoopbackDevice", False):
+                    devices.append((idx, info.get("name", f"Device {idx}")))
+    except Exception as exc:
+        logging.error("Failed to query input devices: %s", exc)
+    return devices
+
+
 def list_wasapi_loopback_devices() -> List[DeviceInfo]:
     """Return WASAPI loopback devices (isLoopbackDevice=True)."""
     devices: List[DeviceInfo] = []
@@ -124,3 +139,14 @@ def choose_wasapi_loopback(preferred_names: list[str] | None = None) -> int | No
     if default_loop is not None:
         return default_loop
     return devices[0][0]
+
+
+def default_input_device() -> int | None:
+    if not sys.platform.startswith("win"):
+        return None
+    try:
+        with _pa() as pa:
+            info = pa.get_default_input_device_info()
+            return int(info["index"])
+    except Exception:
+        return None

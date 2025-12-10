@@ -4,6 +4,7 @@ import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict
+from dotenv import load_dotenv
 
 
 def _default_app_dir() -> Path:
@@ -20,13 +21,14 @@ RECORDINGS_DIR = APP_DIR / "recordings"
 
 @dataclass
 class ClientConfig:
-    server_base: str = "https://domain.com"
-    api_key: str = ""
+    server_base: str = "http://localhost:8000"
+    api_key: str = "changeme"
     recording_enabled: bool = False
     run_on_startup: bool = False
-    chunk_seconds: int = 30
+    chunk_seconds: float = 1.0
     sample_rate: int = 48_000
     spk_device: int | None = None
+    mic_device: int | None = None
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> "ClientConfig":
@@ -35,9 +37,10 @@ class ClientConfig:
             api_key=payload.get("api_key", cls.api_key),
             recording_enabled=bool(payload.get("recording_enabled", cls.recording_enabled)),
             run_on_startup=bool(payload.get("run_on_startup", cls.run_on_startup)),
-            chunk_seconds=int(payload.get("chunk_seconds", cls.chunk_seconds)),
+            chunk_seconds=float(payload.get("chunk_seconds", cls.chunk_seconds)),
             sample_rate=int(payload.get("sample_rate", cls.sample_rate)),
             spk_device=payload.get("spk_device"),
+            mic_device=payload.get("mic_device"),
         )
 
 
@@ -49,12 +52,23 @@ class ConfigManager:
 
     def load(self) -> None:
         try:
+            load_dotenv()
             if self.path.exists():
                 with self.path.open("r", encoding="utf-8") as fh:
                     raw = json.load(fh)
                 self.config = ClientConfig.from_dict(raw)
             else:
                 self.save()
+
+            # Override server_base and api_key from environment (.env), if provided.
+            env_server = os.getenv("SERVER_BASE")
+            env_key = os.getenv("API_KEY")
+            if env_server:
+                self.config.server_base = env_server
+            if env_key:
+                self.config.api_key = env_key
+            # Enforce fixed 1s chunks regardless of persisted/configured values.
+            self.config.chunk_seconds = 1.0
         except Exception as exc:  # pragma: no cover - defensive
             logging.exception("Failed to load config, using defaults: %s", exc)
             self.config = ClientConfig()

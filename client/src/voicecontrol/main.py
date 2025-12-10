@@ -3,13 +3,15 @@ import os
 import signal
 import sys
 import atexit
+from pathlib import Path
 
 from .audio_recorder import AudioRecorder
 from .auth import MasterPasswordProvider
+from .chunk_uploader import ChunkUploader
 from .config import ConfigManager
 from .controller import AppController
 from .ui import AppUI
-from . import startup, config as config_module
+from . import config as config_module
 
 
 def main() -> None:
@@ -17,7 +19,7 @@ def main() -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / "voicecontrol.log"
 
-    level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
+    level_name = os.environ.get("LOG_LEVEL", "DEBUG").upper()
     log_level = getattr(logging, level_name, logging.INFO)
 
     handlers = [logging.StreamHandler(sys.stdout)]
@@ -40,9 +42,24 @@ def main() -> None:
         print("VoiceControl Client runs on Windows only.", file=sys.stderr)
         return
 
-    def chunk_ready(path: str) -> None:
-        # Placeholder for future streaming to server.
-        logging.debug("Chunk ready for upload: %s", path)
+    cfg_mgr = ConfigManager()
+
+    uploader: ChunkUploader | None = None
+    try:
+        uploader = ChunkUploader(
+            server_base=cfg_mgr.config.server_base,
+            api_key=cfg_mgr.config.api_key or "",
+            api_key_provider=lambda: cfg_mgr.config.api_key or "",
+        )
+        uploader.start()
+        logging.info("Chunk uploader initialized for %s", uploader.endpoint)
+    except Exception as exc:
+        logging.warning("Uploader unavailable: %s", exc)
+
+    def chunk_ready(filename: str, data: bytes) -> None:
+        logging.debug("Chunk ready for upload: %s (%s bytes)", filename, len(data))
+        if uploader:
+            uploader.enqueue(filename, data)
 
     # Log available devices for diagnostics using PyAudioWPatch.
     if log_level <= logging.DEBUG:
@@ -78,31 +95,26 @@ def main() -> None:
             except Exception as exc:
                 logging.debug("Could not enumerate devices: %s", exc)
 
-    cfg_mgr = ConfigManager()
-
-    # Sync startup setting with registry on launch.
-    if cfg_mgr.config.run_on_startup:
-        startup.enable_startup()
-    else:
-        startup.disable_startup()
-
     recorder = AudioRecorder(
         output_dir=cfg_mgr.recordings_dir(),
         chunk_seconds=cfg_mgr.config.chunk_seconds,
         sample_rate=cfg_mgr.config.sample_rate,
         on_chunk=chunk_ready,
         spk_device=cfg_mgr.config.spk_device,
+        mic_device=cfg_mgr.config.mic_device,
     )
     controller = AppController(cfg_mgr, recorder)
     password_provider = MasterPasswordProvider(
         server_base=cfg_mgr.config.server_base,
         api_key=cfg_mgr.config.api_key or None,
     )
-    ui = AppUI(controller, password_provider)
+    ui = AppUI(controller, password_provider, uploader)
 
     def shutdown(*_args) -> None:
         try:
             recorder.stop()
+            if uploader:
+                uploader.stop()
         finally:
             sys.exit(0)
 
@@ -112,6 +124,8 @@ def main() -> None:
         except Exception:
             pass
     atexit.register(recorder.stop)
+    if uploader:
+        atexit.register(uploader.stop)
 
     ui.run()
 

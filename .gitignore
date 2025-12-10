@@ -11,3 +11,4 @@ build/
 *.pyzwz
 *.spec
 .DS_Store
+/*/.env
