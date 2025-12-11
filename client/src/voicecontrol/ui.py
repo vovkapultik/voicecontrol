@@ -24,6 +24,7 @@ class AppUI:
         self.root = tk.Tk()
         self.root.withdraw()
         self._is_windows = sys.platform.startswith("win")
+        self._is_frozen = bool(getattr(sys, "frozen", False))
         self.main_win: tk.Toplevel | None = None
         self.status_var = tk.StringVar(value="Stopped")
         self.device_status_var = tk.StringVar(value="")
@@ -34,7 +35,7 @@ class AppUI:
         self.api_key_display_var = tk.StringVar(value=self._mask_key(self.api_key_var.get()))
         self.server_var = tk.StringVar(value=self.config.config.server_base)
         self.chunk_text_var = tk.StringVar(value="Chunk length: 1s (fixed)")
-        autostart_default = startup.is_enabled() if self._is_windows else False
+        autostart_default = startup.is_enabled() if (self._is_windows and self._is_frozen) else False
         if not autostart_default:
             autostart_default = bool(getattr(self.config.config, "run_on_startup", False))
         self.autostart_var = tk.BooleanVar(value=autostart_default)
@@ -186,7 +187,7 @@ class AppUI:
         autostart_row = ttk.Frame(connection_card, style="Card.TFrame")
         autostart_row.grid(row=4, column=0, sticky="we", pady=(8, 0))
         autostart_row.columnconfigure(0, weight=1)
-        auto_state = tk.NORMAL if self._is_windows else tk.DISABLED
+        auto_state = tk.NORMAL if (self._is_windows and self._is_frozen) else tk.DISABLED
         ttk.Checkbutton(
             autostart_row,
             text="Auto-start on Windows login",
@@ -285,8 +286,8 @@ class AppUI:
 
     def _save_autostart(self) -> None:
         desired = self.autostart_var.get()
-        if not self._is_windows:
-            messagebox.showinfo("Auto-start", "Auto-start is available on Windows only.")
+        if not (self._is_windows and self._is_frozen):
+            messagebox.showinfo("Auto-start", "Auto-start is available in the packaged Windows app only.")
             self.autostart_var.set(False)
             self.config.update(run_on_startup=False)
             return

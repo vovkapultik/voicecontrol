@@ -17,12 +17,10 @@ def _is_windows() -> bool:
 
 
 def _run_command() -> str:
-    """Return command to launch the client."""
-    if getattr(sys, "frozen", False):
-        return f'"{sys.executable}"'
-    script = Path(__file__).resolve().parent / "main.py"
-    python_exe = Path(sys.executable).resolve()
-    return f'"{python_exe}" "{script}"'
+    """Return command to launch the packaged client (exe only)."""
+    if not getattr(sys, "frozen", False):
+        raise RuntimeError("Auto-start is only supported for packaged executable.")
+    return f'"{Path(sys.executable).resolve()}"'
 
 
 def enable_startup() -> bool:
@@ -30,15 +28,17 @@ def enable_startup() -> bool:
         logging.info("Startup registration skipped (non-Windows)")
         return False
     try:
+        command = _run_command()
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as key:
-            winreg.SetValueEx(key, VALUE_NAME, 0, winreg.REG_SZ, _run_command())
+            winreg.SetValueEx(key, VALUE_NAME, 0, winreg.REG_SZ, command)
         logging.info("Registered run on startup")
         return True
     except FileNotFoundError:
         # Create the key if missing
         try:
+            command = _run_command()
             with winreg.CreateKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as key:
-                winreg.SetValueEx(key, VALUE_NAME, 0, winreg.REG_SZ, _run_command())
+                winreg.SetValueEx(key, VALUE_NAME, 0, winreg.REG_SZ, command)
             logging.info("Registered run on startup (created key)")
             return True
         except Exception as exc:  # pragma: no cover - defensive
@@ -66,7 +66,7 @@ def disable_startup() -> bool:
 
 
 def is_enabled() -> bool:
-    if not (_is_windows() and winreg):
+    if not (_is_windows() and winreg and getattr(sys, "frozen", False)):
         return False
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_READ) as key:
@@ -76,4 +76,3 @@ def is_enabled() -> bool:
         return False
     except Exception:
         return False
-

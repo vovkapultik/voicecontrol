@@ -44,9 +44,9 @@ def main() -> None:
 
     cfg_mgr = ConfigManager()
     try:
-        if cfg_mgr.config.run_on_startup:
+        if getattr(sys, "frozen", False) and cfg_mgr.config.run_on_startup:
             startup.enable_startup()
-        else:
+        elif getattr(sys, "frozen", False):
             startup.disable_startup()
     except Exception as exc:
         logging.debug("Could not sync auto-start setting: %s", exc)
