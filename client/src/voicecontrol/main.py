@@ -9,6 +9,7 @@ from .auth import MasterPasswordProvider
 from .chunk_uploader import ChunkUploader
 from .config import ConfigManager
 from .controller import AppController
+from . import startup
 from .ui import AppUI
 from . import config as config_module
 
@@ -42,6 +43,13 @@ def main() -> None:
         return
 
     cfg_mgr = ConfigManager()
+    try:
+        if cfg_mgr.config.run_on_startup:
+            startup.enable_startup()
+        else:
+            startup.disable_startup()
+    except Exception as exc:
+        logging.debug("Could not sync auto-start setting: %s", exc)
 
     uploader: ChunkUploader | None = None
     try:

@@ -26,6 +26,7 @@ class ClientConfig:
     sample_rate: int = 48_000
     spk_device: int | None = None
     mic_device: int | None = None
+    run_on_startup: bool = False
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> "ClientConfig":
@@ -36,6 +37,7 @@ class ClientConfig:
             sample_rate=int(payload.get("sample_rate", cls.sample_rate)),
             spk_device=payload.get("spk_device"),
             mic_device=payload.get("mic_device"),
+            run_on_startup=bool(payload.get("run_on_startup", cls.run_on_startup)),
         )
 
 

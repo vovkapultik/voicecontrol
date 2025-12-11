@@ -1,8 +1,10 @@
+import sys
 import tkinter as tk
 from tkinter import messagebox, ttk
 
 from .auth import MasterPasswordProvider
 from .devices import has_wasapi_output_devices
+from . import startup
 
 
 class AppUI:
@@ -21,6 +23,7 @@ class AppUI:
         self._master_password = ""
         self.root = tk.Tk()
         self.root.withdraw()
+        self._is_windows = sys.platform.startswith("win")
         self.main_win: tk.Toplevel | None = None
         self.status_var = tk.StringVar(value="Stopped")
         self.device_status_var = tk.StringVar(value="")
@@ -31,6 +34,10 @@ class AppUI:
         self.api_key_display_var = tk.StringVar(value=self._mask_key(self.api_key_var.get()))
         self.server_var = tk.StringVar(value=self.config.config.server_base)
         self.chunk_text_var = tk.StringVar(value="Chunk length: 1s (fixed)")
+        autostart_default = startup.is_enabled() if self._is_windows else False
+        if not autostart_default:
+            autostart_default = bool(getattr(self.config.config, "run_on_startup", False))
+        self.autostart_var = tk.BooleanVar(value=autostart_default)
         self._status_badge: tk.Label | None = None
         self._toggle_btn: ttk.Button | None = None
         self._device_status_label: tk.Label | None = None
@@ -176,6 +183,24 @@ class AppUI:
             row=0, column=1, sticky="e", padx=(8, 0)
         )
 
+        autostart_row = ttk.Frame(connection_card, style="Card.TFrame")
+        autostart_row.grid(row=4, column=0, sticky="we", pady=(8, 0))
+        autostart_row.columnconfigure(0, weight=1)
+        auto_state = tk.NORMAL if self._is_windows else tk.DISABLED
+        ttk.Checkbutton(
+            autostart_row,
+            text="Auto-start on Windows login",
+            variable=self.autostart_var,
+            state=auto_state,
+        ).grid(row=0, column=0, sticky="w")
+        ttk.Button(
+            autostart_row,
+            text="Save",
+            command=self._save_autostart,
+            style="Secondary.TButton",
+            state=auto_state,
+        ).grid(row=0, column=1, sticky="e", padx=(8, 0))
+
         if self._offline:
             self.offline_var.set("No internet access - using default password.")
             tk.Label(connection_card, textvariable=self.offline_var, fg=self._colors["danger"], bg=self._colors["surface"]).grid(
@@ -257,6 +282,22 @@ class AppUI:
             except Exception:
                 messagebox.showerror("Server URL", "Could not apply server URL to uploader.")
         messagebox.showinfo("Saved", f"Server URL set to {self.config.config.server_base}")
+
+    def _save_autostart(self) -> None:
+        desired = self.autostart_var.get()
+        if not self._is_windows:
+            messagebox.showinfo("Auto-start", "Auto-start is available on Windows only.")
+            self.autostart_var.set(False)
+            self.config.update(run_on_startup=False)
+            return
+        ok = startup.enable_startup() if desired else startup.disable_startup()
+        if ok:
+            self.config.update(run_on_startup=desired)
+            self.autostart_var.set(startup.is_enabled())
+            messagebox.showinfo("Saved", "Auto-start setting updated.")
+            return
+        self.autostart_var.set(startup.is_enabled())
+        messagebox.showerror("Auto-start", "Could not update auto-start setting.")
 
     def _save_speaker_selection(self, selection: str) -> None:
         was_running = self.controller.is_recording
